@@ -1,3 +1,59 @@
+// Package commands provides a comprehensive command registry system for OpenCode.
+//
+// This package implements a hierarchical command structure that supports:
+//   - Built-in system commands
+//   - User-defined commands
+//   - Project-specific commands
+//   - Plugin-provided commands
+//
+// # Core Components
+//
+// Command Interface: Defines the contract that all commands must implement,
+// including execution, validation, metadata, and hierarchical relationships.
+//
+// BaseCommand: A concrete implementation of the Command interface that other
+// commands can embed to reduce boilerplate code. Supports command handlers,
+// metadata, sub-commands, and parent relationships.
+//
+// CommandRegistry: Thread-safe registry for command registration, discovery,
+// and management. Supports hierarchical registration and path-based lookup.
+//
+// CommandBuilder: Fluent interface for constructing commands with various
+// options and configurations.
+//
+// # Usage Example
+//
+//	// Create a command with sub-commands
+//	subCmd := NewCommand("commit", "Commit", "Commit changes").
+//		WithType(BuiltinCommand).
+//		WithHandler(func(ctx context.Context, args map[string]interface{}) error {
+//			// Handle commit logic
+//			return nil
+//		}).
+//		Build()
+//
+//	parentCmd := NewCommand("git", "Git", "Git version control").
+//		WithType(BuiltinCommand).
+//		AddSubCommand(subCmd).
+//		Build()
+//
+//	// Register the hierarchy
+//	err := RegisterCommandHierarchy(parentCmd)
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//
+//	// Find command by path
+//	cmd, found := GetCommandByPath("git commit")
+//	if found {
+//		err := cmd.Execute(context.Background(), args)
+//	}
+//
+// # Thread Safety
+//
+// All registry operations are thread-safe using read-write mutexes.
+// Command instances themselves are not inherently thread-safe and should
+// be designed with concurrent execution in mind.
 package commands
 
 import (
@@ -39,13 +95,17 @@ func (ct CommandType) String() string {
 
 // ArgumentDefinition defines a command argument
 type ArgumentDefinition struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Type        string `json:"type"`        // "string", "int", "bool", "file", etc.
-	Required    bool   `json:"required"`
-	Default     string `json:"default,omitempty"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Type        string   `json:"type"`        // "string", "int", "bool", "file", etc.
+	Required    bool     `json:"required"`
+	Default     string   `json:"default,omitempty"`
 	Options     []string `json:"options,omitempty"` // For enum-like arguments
 }
+
+// CommandHandler represents a function that executes a command
+// This provides flexibility for different execution patterns
+type CommandHandler func(ctx context.Context, args map[string]interface{}) error
 
 // CommandContext provides context information for command execution
 type CommandContext struct {
@@ -99,6 +159,15 @@ type Command interface {
 	
 	// GetExample returns usage examples for this command
 	GetExample() string
+	
+	// GetMetadata returns command-specific metadata
+	GetMetadata() map[string]interface{}
+	
+	// GetParent returns the parent command (nil for root commands)
+	GetParent() Command
+	
+	// GetPath returns the full command path (e.g., "git commit --amend")
+	GetPath() string
 }
 
 // BaseCommand provides a basic implementation of the Command interface
@@ -114,6 +183,9 @@ type BaseCommand struct {
 	hidden      bool
 	aliases     []string
 	example     string
+	handler     CommandHandler                 // Explicit handler function
+	metadata    map[string]interface{}         // Extensible metadata storage
+	parent      Command                        // Parent command reference
 }
 
 // ID returns the unique identifier for the command
@@ -166,10 +238,39 @@ func (bc *BaseCommand) GetExample() string {
 	return bc.example
 }
 
-// Execute provides a default implementation that returns an error
-// Commands should override this method
+// GetMetadata returns command-specific metadata
+func (bc *BaseCommand) GetMetadata() map[string]interface{} {
+	if bc.metadata == nil {
+		return make(map[string]interface{})
+	}
+	// Return a copy to prevent external modification
+	metadata := make(map[string]interface{})
+	for k, v := range bc.metadata {
+		metadata[k] = v
+	}
+	return metadata
+}
+
+// GetParent returns the parent command (nil for root commands)
+func (bc *BaseCommand) GetParent() Command {
+	return bc.parent
+}
+
+// GetPath returns the full command path (e.g., "git commit --amend")
+func (bc *BaseCommand) GetPath() string {
+	if bc.parent == nil {
+		return bc.id
+	}
+	return bc.parent.GetPath() + " " + bc.id
+}
+
+// Execute provides a default implementation that uses the handler if available
+// Commands can override this method or set a handler function
 func (bc *BaseCommand) Execute(ctx context.Context, args map[string]interface{}) error {
-	return fmt.Errorf("command %s does not implement Execute method", bc.id)
+	if bc.handler != nil {
+		return bc.handler(ctx, args)
+	}
+	return fmt.Errorf("command %s does not implement Execute method or have a handler", bc.id)
 }
 
 // ValidateArgs provides a basic validation implementation
@@ -223,6 +324,103 @@ func (bc *BaseCommand) ValidateArgs(args map[string]interface{}) error {
 	return nil
 }
 
+// CommandBuilder provides a fluent interface for building commands
+type CommandBuilder struct {
+	command *BaseCommand
+}
+
+// NewCommand creates a new command builder with required fields
+func NewCommand(id, name, description string) *CommandBuilder {
+	return &CommandBuilder{
+		command: &BaseCommand{
+			id:          id,
+			name:        name,
+			description: description,
+			arguments:   []ArgumentDefinition{},
+			subCommands: []Command{},
+			aliases:     []string{},
+			metadata:    make(map[string]interface{}),
+		},
+	}
+}
+
+// WithCategory sets the command category
+func (cb *CommandBuilder) WithCategory(category string) *CommandBuilder {
+	cb.command.category = category
+	return cb
+}
+
+// WithType sets the command type
+func (cb *CommandBuilder) WithType(commandType CommandType) *CommandBuilder {
+	cb.command.commandType = commandType
+	return cb
+}
+
+// WithHandler sets the command handler function
+func (cb *CommandBuilder) WithHandler(handler CommandHandler) *CommandBuilder {
+	cb.command.handler = handler
+	return cb
+}
+
+// WithArguments sets the command arguments
+func (cb *CommandBuilder) WithArguments(args []ArgumentDefinition) *CommandBuilder {
+	cb.command.arguments = args
+	return cb
+}
+
+// WithAliases sets the command aliases
+func (cb *CommandBuilder) WithAliases(aliases []string) *CommandBuilder {
+	cb.command.aliases = aliases
+	return cb
+}
+
+// WithExample sets the command example
+func (cb *CommandBuilder) WithExample(example string) *CommandBuilder {
+	cb.command.example = example
+	return cb
+}
+
+// WithMetadata sets command metadata
+func (cb *CommandBuilder) WithMetadata(metadata map[string]interface{}) *CommandBuilder {
+	if cb.command.metadata == nil {
+		cb.command.metadata = make(map[string]interface{})
+	}
+	for k, v := range metadata {
+		cb.command.metadata[k] = v
+	}
+	return cb
+}
+
+// WithMetadataValue sets a single metadata value
+func (cb *CommandBuilder) WithMetadataValue(key string, value interface{}) *CommandBuilder {
+	if cb.command.metadata == nil {
+		cb.command.metadata = make(map[string]interface{})
+	}
+	cb.command.metadata[key] = value
+	return cb
+}
+
+// Hidden marks the command as hidden
+func (cb *CommandBuilder) Hidden() *CommandBuilder {
+	cb.command.hidden = true
+	return cb
+}
+
+// AddSubCommand adds a sub-command and sets the parent relationship
+func (cb *CommandBuilder) AddSubCommand(subCmd Command) *CommandBuilder {
+	cb.command.subCommands = append(cb.command.subCommands, subCmd)
+	// Set parent reference if the sub-command is a BaseCommand
+	if baseCmd, ok := subCmd.(*BaseCommand); ok {
+		baseCmd.parent = cb.command
+	}
+	return cb
+}
+
+// Build returns the constructed command
+func (cb *CommandBuilder) Build() *BaseCommand {
+	return cb.command
+}
+
 // CommandRegistry interface defines the contract for command registration and discovery
 type CommandRegistry interface {
 	// Register adds a command to the registry
@@ -248,6 +446,15 @@ type CommandRegistry interface {
 	
 	// Clear removes all commands from the registry (primarily for testing)
 	Clear()
+	
+	// RegisterHierarchy registers a command and all its sub-commands recursively
+	RegisterHierarchy(cmd Command) error
+	
+	// GetByPath retrieves a command by its full path (e.g., "git commit")
+	GetByPath(path string) (Command, bool)
+	
+	// GetRootCommands returns all top-level commands (commands without parents)
+	GetRootCommands() []Command
 }
 
 // DefaultCommandRegistry provides a thread-safe implementation of CommandRegistry
@@ -445,6 +652,54 @@ func (r *DefaultCommandRegistry) Clear() {
 	r.aliases = make(map[string]string)
 }
 
+// RegisterHierarchy registers a command and all its sub-commands recursively
+func (r *DefaultCommandRegistry) RegisterHierarchy(cmd Command) error {
+	// Register the main command first
+	if err := r.Register(cmd); err != nil {
+		return err
+	}
+	
+	// Register all sub-commands recursively
+	for _, subCmd := range cmd.GetSubCommands() {
+		if err := r.RegisterHierarchy(subCmd); err != nil {
+			return fmt.Errorf("failed to register sub-command %s: %w", subCmd.ID(), err)
+		}
+	}
+	
+	return nil
+}
+
+// GetByPath retrieves a command by its full path (e.g., "git commit")
+func (r *DefaultCommandRegistry) GetByPath(path string) (Command, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	
+	// For now, search through all commands to find one with matching path
+	// This could be optimized with a path-based index in the future
+	for _, cmd := range r.commands {
+		if cmd.GetPath() == path {
+			return cmd, true
+		}
+	}
+	
+	return nil, false
+}
+
+// GetRootCommands returns all top-level commands (commands without parents)
+func (r *DefaultCommandRegistry) GetRootCommands() []Command {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	
+	commands := make([]Command, 0)
+	for _, cmd := range r.commands {
+		if cmd.GetParent() == nil {
+			commands = append(commands, cmd)
+		}
+	}
+	
+	return commands
+}
+
 // Global registry instance
 var globalRegistry CommandRegistry = NewCommandRegistry()
 
@@ -488,4 +743,19 @@ func GetGlobalRegistry() CommandRegistry {
 // Primarily for testing
 func SetGlobalRegistry(registry CommandRegistry) {
 	globalRegistry = registry
+}
+
+// RegisterCommandHierarchy registers a command and all its sub-commands in the global registry
+func RegisterCommandHierarchy(cmd Command) error {
+	return globalRegistry.RegisterHierarchy(cmd)
+}
+
+// GetCommandByPath retrieves a command by its full path from the global registry
+func GetCommandByPath(path string) (Command, bool) {
+	return globalRegistry.GetByPath(path)
+}
+
+// GetRootCommands returns all top-level commands from the global registry
+func GetRootCommands() []Command {
+	return globalRegistry.GetRootCommands()
 }

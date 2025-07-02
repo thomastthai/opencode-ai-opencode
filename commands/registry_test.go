@@ -240,3 +240,241 @@ func TestGlobalRegistry(t *testing.T) {
 		t.Errorf("Expected 1 command in global registry, got %d", len(commands))
 	}
 }
+
+func TestCommandBuilder(t *testing.T) {
+	handler := func(ctx context.Context, args map[string]interface{}) error {
+		return nil
+	}
+	
+	cmd := NewCommand("test_builder", "Test Builder", "Test command builder").
+		WithCategory("test").
+		WithType(BuiltinCommand).
+		WithHandler(handler).
+		WithAliases([]string{"tb", "test"}).
+		WithExample("test_builder --help").
+		WithMetadataValue("version", "1.0").
+		WithMetadataValue("author", "test").
+		Build()
+	
+	if cmd.ID() != "test_builder" {
+		t.Errorf("Expected ID 'test_builder', got %s", cmd.ID())
+	}
+	
+	if cmd.Category() != "test" {
+		t.Errorf("Expected category 'test', got %s", cmd.Category())
+	}
+	
+	if cmd.Type() != BuiltinCommand {
+		t.Errorf("Expected type BuiltinCommand, got %s", cmd.Type().String())
+	}
+	
+	aliases := cmd.GetAliases()
+	if len(aliases) != 2 || aliases[0] != "tb" || aliases[1] != "test" {
+		t.Errorf("Expected aliases [tb, test], got %v", aliases)
+	}
+	
+	metadata := cmd.GetMetadata()
+	if metadata["version"] != "1.0" || metadata["author"] != "test" {
+		t.Errorf("Expected metadata with version=1.0 and author=test, got %v", metadata)
+	}
+	
+	// Test handler execution
+	err := cmd.Execute(context.Background(), map[string]interface{}{})
+	if err != nil {
+		t.Errorf("Expected handler execution to succeed, got error: %v", err)
+	}
+}
+
+func TestCommandHierarchy(t *testing.T) {
+	// Create sub-command
+	subCmd := NewCommand("commit", "Commit", "Commit changes").
+		WithCategory("vcs").
+		WithType(BuiltinCommand).
+		Build()
+	
+	// Add sub-command to parent
+	parentWithSub := NewCommand("git", "Git", "Git version control").
+		WithCategory("vcs").
+		WithType(BuiltinCommand).
+		AddSubCommand(subCmd).
+		Build()
+	
+	// Test parent-child relationship
+	subCommands := parentWithSub.GetSubCommands()
+	if len(subCommands) != 1 {
+		t.Errorf("Expected 1 sub-command, got %d", len(subCommands))
+	}
+	
+	if subCommands[0].ID() != "commit" {
+		t.Errorf("Expected sub-command ID 'commit', got %s", subCommands[0].ID())
+	}
+	
+	// Test parent reference
+	if subCmd.GetParent() == nil {
+		t.Error("Expected sub-command to have parent reference")
+	} else if subCmd.GetParent().ID() != "git" {
+		t.Errorf("Expected parent ID 'git', got %s", subCmd.GetParent().ID())
+	}
+	
+	// Test command path
+	expectedPath := "git commit"
+	if subCmd.GetPath() != expectedPath {
+		t.Errorf("Expected path '%s', got '%s'", expectedPath, subCmd.GetPath())
+	}
+}
+
+func TestRegistryHierarchy(t *testing.T) {
+	registry := NewCommandRegistry()
+	
+	// Create parent command with sub-commands
+	subCmd := NewCommand("commit", "Commit", "Commit changes").
+		WithType(BuiltinCommand).
+		Build()
+	
+	parentCmd := NewCommand("git", "Git", "Git version control").
+		WithType(BuiltinCommand).
+		AddSubCommand(subCmd).
+		Build()
+	
+	// Register hierarchy
+	err := registry.RegisterHierarchy(parentCmd)
+	if err != nil {
+		t.Fatalf("Failed to register hierarchy: %v", err)
+	}
+	
+	// Verify both commands are registered
+	_, exists := registry.Get("git")
+	if !exists {
+		t.Error("Parent command not found in registry")
+	}
+	
+	_, exists = registry.Get("commit")
+	if !exists {
+		t.Error("Sub-command not found in registry")
+	}
+	
+	// Test GetByPath
+	cmd, exists := registry.GetByPath("git commit")
+	if !exists {
+		t.Error("Command not found by path")
+	} else if cmd.ID() != "commit" {
+		t.Errorf("Expected command ID 'commit', got %s", cmd.ID())
+	}
+	
+	// Test GetRootCommands
+	rootCommands := registry.GetRootCommands()
+	if len(rootCommands) != 1 {
+		t.Errorf("Expected 1 root command, got %d", len(rootCommands))
+	} else if rootCommands[0].ID() != "git" {
+		t.Errorf("Expected root command ID 'git', got %s", rootCommands[0].ID())
+	}
+}
+
+func TestCommandMetadata(t *testing.T) {
+	metadata := map[string]interface{}{
+		"version":     "1.0",
+		"author":      "test",
+		"deprecated":  false,
+		"priority":    10,
+	}
+	
+	cmd := NewCommand("test_meta", "Test Metadata", "Test metadata handling").
+		WithMetadata(metadata).
+		WithMetadataValue("extra", "value").
+		Build()
+	
+	retrievedMetadata := cmd.GetMetadata()
+	
+	// Check all metadata values
+	if retrievedMetadata["version"] != "1.0" {
+		t.Errorf("Expected version '1.0', got %v", retrievedMetadata["version"])
+	}
+	
+	if retrievedMetadata["author"] != "test" {
+		t.Errorf("Expected author 'test', got %v", retrievedMetadata["author"])
+	}
+	
+	if retrievedMetadata["deprecated"] != false {
+		t.Errorf("Expected deprecated false, got %v", retrievedMetadata["deprecated"])
+	}
+	
+	if retrievedMetadata["priority"] != 10 {
+		t.Errorf("Expected priority 10, got %v", retrievedMetadata["priority"])
+	}
+	
+	if retrievedMetadata["extra"] != "value" {
+		t.Errorf("Expected extra 'value', got %v", retrievedMetadata["extra"])
+	}
+	
+	// Test metadata isolation (returned copy)
+	retrievedMetadata["modified"] = true
+	newMetadata := cmd.GetMetadata()
+	if _, exists := newMetadata["modified"]; exists {
+		t.Error("Metadata should be isolated - external modification should not affect original")
+	}
+}
+
+func TestCommandHandler(t *testing.T) {
+	executed := false
+	handler := func(ctx context.Context, args map[string]interface{}) error {
+		executed = true
+		return nil
+	}
+	
+	cmd := NewCommand("test_handler", "Test Handler", "Test command handler").
+		WithHandler(handler).
+		Build()
+	
+	// Execute command
+	err := cmd.Execute(context.Background(), map[string]interface{}{})
+	if err != nil {
+		t.Errorf("Expected handler execution to succeed, got error: %v", err)
+	}
+	
+	if !executed {
+		t.Error("Handler was not executed")
+	}
+}
+
+func TestGlobalHierarchyFunctions(t *testing.T) {
+	// Save original registry
+	originalRegistry := globalRegistry
+	defer func() {
+		globalRegistry = originalRegistry
+	}()
+	
+	// Create fresh registry for test
+	SetGlobalRegistry(NewCommandRegistry())
+	
+	// Create command hierarchy
+	subCmd := NewCommand("push", "Push", "Push changes").
+		WithType(BuiltinCommand).
+		Build()
+	
+	parentCmd := NewCommand("git", "Git", "Git version control").
+		WithType(BuiltinCommand).
+		AddSubCommand(subCmd).
+		Build()
+	
+	// Test global hierarchy registration
+	err := RegisterCommandHierarchy(parentCmd)
+	if err != nil {
+		t.Fatalf("Failed to register hierarchy globally: %v", err)
+	}
+	
+	// Test global path retrieval
+	cmd, exists := GetCommandByPath("git push")
+	if !exists {
+		t.Error("Command not found by path globally")
+	} else if cmd.ID() != "push" {
+		t.Errorf("Expected command ID 'push', got %s", cmd.ID())
+	}
+	
+	// Test global root commands
+	rootCommands := GetRootCommands()
+	if len(rootCommands) != 1 {
+		t.Errorf("Expected 1 root command globally, got %d", len(rootCommands))
+	} else if rootCommands[0].ID() != "git" {
+		t.Errorf("Expected root command ID 'git', got %s", rootCommands[0].ID())
+	}
+}
