@@ -423,3 +423,143 @@ func WithReasoningEffort(effort string) OpenAIOption {
 		options.reasoningEffort = defaultReasoningEffort
 	}
 }
+
+// NewOpenAIProvider creates a new OpenAI provider with the new architecture.
+func NewOpenAIProvider(config ProviderConfig) (Provider, error) {
+	openaiConfig, ok := config.(*OpenAIConfig)
+	if !ok {
+		return nil, fmt.Errorf("OpenAI provider requires OpenAIConfig, got %T", config)
+	}
+	
+	if err := openaiConfig.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid OpenAI provider configuration: %w", err)
+	}
+	
+	// Convert new config to legacy options
+	clientOptions := providerClientOptions{
+		apiKey:        openaiConfig.GetAPIKey(),
+		model:         openaiConfig.GetModel(),
+		maxTokens:     openaiConfig.GetMaxTokens(),
+		systemMessage: openaiConfig.GetSystemMessage(),
+	}
+	
+	// Add OpenAI-specific options
+	var openaiOpts []OpenAIOption
+	if openaiConfig.BaseURL != "" {
+		openaiOpts = append(openaiOpts, WithOpenAIBaseURL(openaiConfig.BaseURL))
+	}
+	if openaiConfig.ExtraHeaders != nil {
+		openaiOpts = append(openaiOpts, WithOpenAIExtraHeaders(openaiConfig.ExtraHeaders))
+	}
+	if openaiConfig.DisableCache {
+		openaiOpts = append(openaiOpts, WithOpenAIDisableCache())
+	}
+	if openaiConfig.ReasoningEffort != "" {
+		openaiOpts = append(openaiOpts, WithReasoningEffort(openaiConfig.ReasoningEffort))
+	}
+	
+	clientOptions.openaiOptions = openaiOpts
+	
+	client := newOpenAIClient(clientOptions)
+	
+	return &OpenAIProviderWrapper{
+		client: client.(*openaiClient),
+		config: *openaiConfig,
+	}, nil
+}
+
+// OpenAIProviderWrapper wraps the legacy openaiClient to implement the new interfaces.
+type OpenAIProviderWrapper struct {
+	client *openaiClient
+	config OpenAIConfig
+}
+
+// Ensure OpenAIProviderWrapper implements all relevant interfaces
+var _ Provider = (*OpenAIProviderWrapper)(nil)
+var _ StreamProvider = (*OpenAIProviderWrapper)(nil)
+var _ ToolCallingProvider = (*OpenAIProviderWrapper)(nil)
+var _ ReasoningProvider = (*OpenAIProviderWrapper)(nil)
+var _ CachingProvider = (*OpenAIProviderWrapper)(nil)
+var _ AttachmentProvider = (*OpenAIProviderWrapper)(nil)
+
+// SendMessages implements Provider interface.
+func (p *OpenAIProviderWrapper) SendMessages(ctx context.Context, messages []message.Message, tools []tools.BaseTool) (*ProviderResponse, error) {
+	return p.client.send(ctx, messages, tools)
+}
+
+// StreamResponse implements StreamProvider interface.
+func (p *OpenAIProviderWrapper) StreamResponse(ctx context.Context, messages []message.Message, tools []tools.BaseTool) <-chan ProviderEvent {
+	return p.client.stream(ctx, messages, tools)
+}
+
+// Model implements Provider interface.
+func (p *OpenAIProviderWrapper) Model() models.Model {
+	return p.config.GetModel()
+}
+
+// SupportsToolCalling implements ToolCallingProvider interface.
+func (p *OpenAIProviderWrapper) SupportsToolCalling() bool {
+	return true // OpenAI supports tool calling
+}
+
+// SupportsReasoning implements ReasoningProvider interface.
+func (p *OpenAIProviderWrapper) SupportsReasoning() bool {
+	// Check if the model supports reasoning (o1 models)
+	modelID := p.config.GetModel().ID
+	return string(modelID) == "o1" || string(modelID) == "o1-pro" || string(modelID) == "o1-mini" ||
+		   string(modelID) == "o3" || string(modelID) == "o3-mini" || string(modelID) == "o4-mini"
+}
+
+// SetReasoningEffort implements ReasoningProvider interface.
+func (p *OpenAIProviderWrapper) SetReasoningEffort(effort string) error {
+	validEfforts := []string{"low", "medium", "high"}
+	for _, valid := range validEfforts {
+		if effort == valid {
+			p.config.ReasoningEffort = effort
+			p.client.options.reasoningEffort = effort
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid reasoning effort '%s', must be one of %v", effort, validEfforts)
+}
+
+// SupportsCaching implements CachingProvider interface.
+func (p *OpenAIProviderWrapper) SupportsCaching() bool {
+	return true // OpenAI supports prompt caching
+}
+
+// SetCacheEnabled implements CachingProvider interface.
+func (p *OpenAIProviderWrapper) SetCacheEnabled(enabled bool) {
+	p.config.DisableCache = !enabled
+	p.client.options.disableCache = !enabled
+}
+
+// SupportsAttachments implements AttachmentProvider interface.
+func (p *OpenAIProviderWrapper) SupportsAttachments() bool {
+	return p.config.GetModel().SupportsAttachments
+}
+
+// GetSupportedMimeTypes implements AttachmentProvider interface.
+func (p *OpenAIProviderWrapper) GetSupportedMimeTypes() []string {
+	return []string{
+		"image/jpeg",
+		"image/png", 
+		"image/gif",
+		"image/webp",
+	}
+}
+
+func init() {
+	// Register the OpenAI provider
+	RegisterProvider(models.ProviderOpenAI, NewOpenAIProvider, ProviderInfo{
+		Name:        models.ProviderOpenAI,
+		Description: "OpenAI provider supporting GPT models including reasoning models like o1",
+		Capabilities: []string{
+			"streaming",
+			"tool_calling",
+			"reasoning", 
+			"caching",
+			"attachments",
+		},
+	})
+}

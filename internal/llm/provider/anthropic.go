@@ -470,3 +470,145 @@ func WithAnthropicShouldThinkFn(fn func(string) bool) AnthropicOption {
 		options.shouldThink = fn
 	}
 }
+
+// NewAnthropicProvider creates a new Anthropic provider with the new architecture.
+func NewAnthropicProvider(config ProviderConfig) (Provider, error) {
+	anthropicConfig, ok := config.(*AnthropicConfig)
+	if !ok {
+		return nil, fmt.Errorf("Anthropic provider requires AnthropicConfig, got %T", config)
+	}
+	
+	if err := anthropicConfig.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid Anthropic provider configuration: %w", err)
+	}
+	
+	// Convert new config to legacy options
+	clientOptions := providerClientOptions{
+		apiKey:        anthropicConfig.GetAPIKey(),
+		model:         anthropicConfig.GetModel(),
+		maxTokens:     anthropicConfig.GetMaxTokens(),
+		systemMessage: anthropicConfig.GetSystemMessage(),
+	}
+	
+	// Add Anthropic-specific options
+	var anthropicOpts []AnthropicOption
+	if anthropicConfig.UseBedrock {
+		anthropicOpts = append(anthropicOpts, WithAnthropicBedrock(anthropicConfig.UseBedrock))
+	}
+	if anthropicConfig.DisableCache {
+		anthropicOpts = append(anthropicOpts, WithAnthropicDisableCache())
+	}
+	if anthropicConfig.ShouldThink != nil {
+		anthropicOpts = append(anthropicOpts, WithAnthropicShouldThinkFn(anthropicConfig.ShouldThink))
+	}
+	
+	clientOptions.anthropicOptions = anthropicOpts
+	
+	client := newAnthropicClient(clientOptions)
+	
+	return &AnthropicProviderWrapper{
+		client: client.(*anthropicClient),
+		config: *anthropicConfig,
+	}, nil
+}
+
+// AnthropicProviderWrapper wraps the legacy anthropicClient to implement the new interfaces.
+type AnthropicProviderWrapper struct {
+	client *anthropicClient
+	config AnthropicConfig
+}
+
+// Ensure AnthropicProviderWrapper implements all relevant interfaces
+var _ Provider = (*AnthropicProviderWrapper)(nil)
+var _ StreamProvider = (*AnthropicProviderWrapper)(nil)
+var _ ToolCallingProvider = (*AnthropicProviderWrapper)(nil)
+var _ ReasoningProvider = (*AnthropicProviderWrapper)(nil)
+var _ CachingProvider = (*AnthropicProviderWrapper)(nil)
+var _ AttachmentProvider = (*AnthropicProviderWrapper)(nil)
+
+// SendMessages implements Provider interface.
+func (p *AnthropicProviderWrapper) SendMessages(ctx context.Context, messages []message.Message, tools []toolsPkg.BaseTool) (*ProviderResponse, error) {
+	return p.client.send(ctx, messages, tools)
+}
+
+// StreamResponse implements StreamProvider interface.
+func (p *AnthropicProviderWrapper) StreamResponse(ctx context.Context, messages []message.Message, tools []toolsPkg.BaseTool) <-chan ProviderEvent {
+	return p.client.stream(ctx, messages, tools)
+}
+
+// Model implements Provider interface.
+func (p *AnthropicProviderWrapper) Model() models.Model {
+	return p.config.GetModel()
+}
+
+// SupportsToolCalling implements ToolCallingProvider interface.
+func (p *AnthropicProviderWrapper) SupportsToolCalling() bool {
+	return true // Anthropic supports tool calling
+}
+
+// SupportsReasoning implements ReasoningProvider interface.
+func (p *AnthropicProviderWrapper) SupportsReasoning() bool {
+	// Claude models support reasoning through thinking
+	return true
+}
+
+// SetReasoningEffort implements ReasoningProvider interface.
+func (p *AnthropicProviderWrapper) SetReasoningEffort(effort string) error {
+	// Anthropic doesn't have explicit reasoning effort levels like OpenAI,
+	// but we can map this to thinking behavior
+	switch effort {
+	case "low", "medium", "high":
+		// For Anthropic, we can enable/disable thinking based on effort
+		if effort == "low" {
+			p.config.ShouldThink = func(string) bool { return false }
+		} else {
+			p.config.ShouldThink = DefaultShouldThinkFn
+		}
+		return nil
+	default:
+		return fmt.Errorf("invalid reasoning effort '%s', must be one of [low, medium, high]", effort)
+	}
+}
+
+// SupportsCaching implements CachingProvider interface.
+func (p *AnthropicProviderWrapper) SupportsCaching() bool {
+	return true // Anthropic supports prompt caching
+}
+
+// SetCacheEnabled implements CachingProvider interface.
+func (p *AnthropicProviderWrapper) SetCacheEnabled(enabled bool) {
+	p.config.DisableCache = !enabled
+	p.client.options.disableCache = !enabled
+}
+
+// SupportsAttachments implements AttachmentProvider interface.
+func (p *AnthropicProviderWrapper) SupportsAttachments() bool {
+	return p.config.GetModel().SupportsAttachments
+}
+
+// GetSupportedMimeTypes implements AttachmentProvider interface.
+func (p *AnthropicProviderWrapper) GetSupportedMimeTypes() []string {
+	return []string{
+		"image/jpeg",
+		"image/png",
+		"image/gif", 
+		"image/webp",
+		"text/plain",
+		"application/pdf",
+	}
+}
+
+func init() {
+	// Register the Anthropic provider
+	RegisterProvider(models.ProviderAnthropic, NewAnthropicProvider, ProviderInfo{
+		Name:        models.ProviderAnthropic,
+		Description: "Anthropic provider supporting Claude models with advanced reasoning and thinking capabilities",
+		Capabilities: []string{
+			"streaming",
+			"tool_calling",
+			"reasoning",
+			"caching",
+			"attachments",
+		},
+	})
+}
