@@ -50,11 +50,11 @@ type ProviderEvent struct {
 	ToolCall *message.ToolCall
 	Error    error
 }
-type Provider interface {
+// Deprecated: Use individual provider interfaces instead.
+// This is kept for backward compatibility.
+type LegacyProvider interface {
 	SendMessages(ctx context.Context, messages []message.Message, tools []tools.BaseTool) (*ProviderResponse, error)
-
 	StreamResponse(ctx context.Context, messages []message.Message, tools []tools.BaseTool) <-chan ProviderEvent
-
 	Model() models.Model
 }
 
@@ -83,7 +83,9 @@ type baseProvider[C ProviderClient] struct {
 	client  C
 }
 
-func NewProvider(providerName models.ModelProvider, opts ...ProviderClientOption) (Provider, error) {
+// Deprecated: Use NewProvider from registry instead.
+// This function is kept for backward compatibility.
+func NewLegacyProvider(providerName models.ModelProvider, opts ...ProviderClientOption) (Provider, error) {
 	clientOptions := providerClientOptions{}
 	for _, o := range opts {
 		o(&clientOptions)

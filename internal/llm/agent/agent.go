@@ -321,7 +321,14 @@ func (a *agent) createUserMessage(ctx context.Context, sessionID, content string
 
 func (a *agent) streamAndHandleEvents(ctx context.Context, sessionID string, msgHistory []message.Message) (message.Message, *message.Message, error) {
 	ctx = context.WithValue(ctx, tools.SessionIDContextKey, sessionID)
-	eventChan := a.provider.StreamResponse(ctx, msgHistory, a.tools)
+	
+	// Use type assertion to check if provider supports streaming
+	var eventChan <-chan provider.ProviderEvent
+	if streamProvider, ok := a.provider.(provider.StreamProvider); ok {
+		eventChan = streamProvider.StreamResponse(ctx, msgHistory, a.tools)
+	} else {
+		return message.Message{}, nil, fmt.Errorf("provider does not support streaming")
+	}
 
 	assistantMsg, err := a.messages.Create(ctx, sessionID, message.CreateMessageParams{
 		Role:  message.Assistant,
@@ -721,35 +728,59 @@ func createAgentProvider(agentName config.AgentName) (provider.Provider, error) 
 	if providerCfg.Disabled {
 		return nil, fmt.Errorf("provider %s is not enabled", model.Provider)
 	}
+	
 	maxTokens := model.DefaultMaxTokens
 	if agentConfig.MaxTokens > 0 {
 		maxTokens = agentConfig.MaxTokens
 	}
-	opts := []provider.ProviderClientOption{
-		provider.WithAPIKey(providerCfg.APIKey),
-		provider.WithModel(model),
-		provider.WithSystemMessage(prompt.GetAgentPrompt(agentName, model.Provider)),
-		provider.WithMaxTokens(maxTokens),
+	
+	systemMessage := prompt.GetAgentPrompt(agentName, model.Provider)
+	
+	// Create provider-specific configuration
+	var providerConfig provider.ProviderConfig
+	var err error
+	
+	switch model.Provider {
+	case models.ProviderOpenAI:
+		openaiConfig := &provider.OpenAIConfig{
+			BaseProviderConfig: provider.BaseProviderConfig{
+				APIKey:        providerCfg.APIKey,
+				Model:         model,
+				MaxTokens:     maxTokens,
+				SystemMessage: systemMessage,
+			},
+		}
+		if model.CanReason {
+			openaiConfig.ReasoningEffort = agentConfig.ReasoningEffort
+		}
+		providerConfig = openaiConfig
+		
+	case models.ProviderAnthropic:
+		anthropicConfig := &provider.AnthropicConfig{
+			BaseProviderConfig: provider.BaseProviderConfig{
+				APIKey:        providerCfg.APIKey,
+				Model:         model,
+				MaxTokens:     maxTokens,
+				SystemMessage: systemMessage,
+			},
+		}
+		if model.CanReason && agentName == config.AgentCoder {
+			anthropicConfig.ShouldThink = provider.DefaultShouldThinkFn
+		}
+		providerConfig = anthropicConfig
+		
+	default:
+		// Fall back to legacy provider creation for now
+		opts := []provider.ProviderClientOption{
+			provider.WithAPIKey(providerCfg.APIKey),
+			provider.WithModel(model),
+			provider.WithSystemMessage(systemMessage),
+			provider.WithMaxTokens(maxTokens),
+		}
+		return provider.NewLegacyProvider(model.Provider, opts...)
 	}
-	if model.Provider == models.ProviderOpenAI || model.Provider == models.ProviderLocal && model.CanReason {
-		opts = append(
-			opts,
-			provider.WithOpenAIOptions(
-				provider.WithReasoningEffort(agentConfig.ReasoningEffort),
-			),
-		)
-	} else if model.Provider == models.ProviderAnthropic && model.CanReason && agentName == config.AgentCoder {
-		opts = append(
-			opts,
-			provider.WithAnthropicOptions(
-				provider.WithAnthropicShouldThinkFn(provider.DefaultShouldThinkFn),
-			),
-		)
-	}
-	agentProvider, err := provider.NewProvider(
-		model.Provider,
-		opts...,
-	)
+	
+	agentProvider, err := provider.NewProvider(model.Provider, providerConfig)
 	if err != nil {
 		return nil, fmt.Errorf("could not create provider: %v", err)
 	}
