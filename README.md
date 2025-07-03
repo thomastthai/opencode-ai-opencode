@@ -464,20 +464,65 @@ Custom commands are predefined prompts stored as Markdown files in one of three 
 
 Each `.md` file in these directories becomes a custom command. The file name (without extension) becomes the command ID.
 
-For example, creating a file at `~/.config/opencode/commands/prime-context.md` with content:
+#### Basic Command Format
+
+For a simple command, create a file with just the command content:
 
 ```markdown
 RUN git ls-files
 READ README.md
 ```
 
-This creates a command called `user:prime-context`.
+#### Advanced Command Format with YAML Frontmatter
+
+OpenCode supports YAML frontmatter in command files to provide rich metadata:
+
+```markdown
+---
+name: Prime Context
+description: Load project context for the AI assistant
+category: context
+aliases:
+  - prime
+  - ctx
+arguments:
+  - name: FOCUS_AREA
+    description: Specific area to focus on (optional)
+    type: string
+    required: false
+    default: "general"
+example: "prime-context FOCUS_AREA=frontend"
+tags:
+  - context
+  - setup
+hidden: false
+---
+RUN git ls-files | grep $FOCUS_AREA
+READ README.md
+```
+
+#### Frontmatter Fields
+
+The YAML frontmatter supports the following fields:
+
+- **name**: Display name for the command (defaults to command ID with prefix)
+- **description**: Detailed description of what the command does
+- **category**: Category for organizing commands
+- **aliases**: Alternative names for the command
+- **arguments**: Array of argument definitions (see Command Arguments section)
+- **example**: Usage example showing how to use the command
+- **tags**: Array of tags for searching and categorization
+- **hidden**: Set to `true` to hide the command from general listings
+
+For example, creating a file at `~/.config/opencode/commands/prime-context.md` creates a command called `user:prime-context`.
 
 ### Command Arguments
 
 OpenCode supports named arguments in custom commands using placeholders in the format `$NAME` (where NAME consists of uppercase letters, numbers, and underscores, and must start with a letter).
 
-For example:
+#### Automatic Argument Detection
+
+For simple commands, OpenCode automatically detects arguments from placeholders:
 
 ```markdown
 # Fetch Context for Issue $ISSUE_NUMBER
@@ -487,11 +532,45 @@ RUN git grep --author="$AUTHOR_NAME" -n .
 RUN grep -R "$SEARCH_PATTERN" $DIRECTORY
 ```
 
+#### Explicit Argument Definition
+
+You can explicitly define arguments in the YAML frontmatter for better control:
+
+```markdown
+---
+name: Git Commit with Message
+description: Commit all changes with a descriptive message
+arguments:
+  - name: MESSAGE
+    description: The commit message
+    type: string
+    required: true
+  - name: PUSH
+    description: Whether to push after commit
+    type: string
+    required: false
+    default: "no"
+    options: ["yes", "no"]
+---
+RUN git add .
+RUN git commit -m "$MESSAGE"
+```
+
+#### Argument Definition Fields
+
+- **name**: The argument name (must match placeholder in content)
+- **description**: Human-readable description of the argument
+- **type**: Data type (string, int, bool, file, etc.)
+- **required**: Whether the argument is mandatory
+- **default**: Default value if not provided
+- **options**: Array of valid values for enum-like arguments
+
 When you run a command with arguments, OpenCode will prompt you to enter values for each unique placeholder. Named arguments provide several benefits:
 
 - Clear identification of what each argument represents
 - Ability to use the same argument multiple times
 - Better organization for commands with multiple inputs
+- Type validation and default values
 
 ### Organizing Commands
 
