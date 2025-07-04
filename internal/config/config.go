@@ -978,3 +978,26 @@ func LoadGitHubToken() (string, error) {
 
 	return "", fmt.Errorf("GitHub token not found in standard locations")
 }
+
+// Init is a simplified configuration initializer for tests.
+func Init(opts Options) {
+	if cfg != nil {
+		return
+	}
+	cfg = &Config{
+		WorkingDir:   "/tmp",
+		Data:         Data{Directory: "/tmp/.opencode"},
+		MCPServers:   make(map[string]MCPServer),
+		Providers:    make(map[models.ModelProvider]Provider),
+		LSP:          make(map[string]LSPConfig),
+		Agents:       make(map[AgentName]Agent),
+		TUI:          TUIConfig{Theme: "default"},
+		Shell:        ShellConfig{Path: "/bin/bash"},
+		ContextPaths: []string{},
+	}
+}
+
+// Options holds simplified configuration options for tests.
+type Options struct {
+	Version string
+}

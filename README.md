@@ -442,162 +442,92 @@ OpenCode supports custom commands that can be created by users to quickly send p
 
 Custom commands are predefined prompts stored as Markdown files in one of three locations:
 
-1. **User Commands** (prefixed with `user:`):
+1.  **User Commands** (prefixed with `user:`):
+    -   `$XDG_CONFIG_HOME/opencode/commands/` (e.g., `~/.config/opencode/commands/`)
+    -   `$HOME/.opencode/commands/`
 
-   ```
-   $XDG_CONFIG_HOME/opencode/commands/
-   ```
+2.  **Project Commands** (prefixed with `project:`):
+    -   `<PROJECT DIR>/.opencode/commands/`
 
-   (typically `~/.config/opencode/commands/` on Linux/macOS)
+Each `.md` file in these directories becomes a custom command. The file name (without the `.md` extension) becomes the command's ID.
 
-   or
+### Command Format
 
-   ```
-   $HOME/.opencode/commands/
-   ```
+Commands can be simple markdown files or include YAML frontmatter for more advanced configuration.
 
-2. **Project Commands** (prefixed with `project:`):
-
-   ```
-   <PROJECT DIR>/.opencode/commands/
-   ```
-
-Each `.md` file in these directories becomes a custom command. The file name (without extension) becomes the command ID.
-
-#### Basic Command Format
-
-For a simple command, create a file with just the command content:
+**Basic Command:**
 
 ```markdown
 RUN git ls-files
 READ README.md
 ```
 
-#### Advanced Command Format with YAML Frontmatter
-
-OpenCode supports YAML frontmatter in command files to provide rich metadata:
+**Command with YAML Frontmatter:**
 
 ```markdown
 ---
-name: Prime Context
-description: Load project context for the AI assistant
-category: context
-aliases:
-  - prime
-  - ctx
-arguments:
-  - name: FOCUS_AREA
-    description: Specific area to focus on (optional)
-    type: string
-    required: false
-    default: "general"
-example: "prime-context FOCUS_AREA=frontend"
-tags:
-  - context
-  - setup
-hidden: false
+name: "Test Go Project"
+description: "Run all Go tests in the current project."
+aliases: ["go-test", "test-go"]
 ---
-RUN git ls-files | grep $FOCUS_AREA
-READ README.md
+go test ./...
 ```
 
-#### Frontmatter Fields
+When you run a custom command, the content of the markdown file (without the frontmatter) is sent to the AI.
 
-The YAML frontmatter supports the following fields:
+## Development
 
-- **name**: Display name for the command (defaults to command ID with prefix)
-- **description**: Detailed description of what the command does
-- **category**: Category for organizing commands
-- **aliases**: Alternative names for the command
-- **arguments**: Array of argument definitions (see Command Arguments section)
-- **example**: Usage example showing how to use the command
-- **tags**: Array of tags for searching and categorization
-- **hidden**: Set to `true` to hide the command from general listings
+### Prerequisites
 
-For example, creating a file at `~/.config/opencode/commands/prime-context.md` creates a command called `user:prime-context`.
+- Go 1.24.0 or higher
 
-### Command Arguments
+### Building from Source
 
-OpenCode supports named arguments in custom commands using placeholders in the format `$NAME` (where NAME consists of uppercase letters, numbers, and underscores, and must start with a letter).
+```bash
+# Clone the repository
+git clone https://github.com/opencode-ai/opencode.git
+cd opencode
 
-#### Automatic Argument Detection
+# Build
+go build -o opencode
 
-For simple commands, OpenCode automatically detects arguments from placeholders:
-
-```markdown
-# Fetch Context for Issue $ISSUE_NUMBER
-
-RUN gh issue view $ISSUE_NUMBER --json title,body,comments
-RUN git grep --author="$AUTHOR_NAME" -n .
-RUN grep -R "$SEARCH_PATTERN" $DIRECTORY
+# Run
+./opencode
 ```
 
-#### Explicit Argument Definition
+### Adding Built-in Commands
 
-You can explicitly define arguments in the YAML frontmatter for better control:
+To add a new built-in command:
 
-```markdown
----
-name: Git Commit with Message
-description: Commit all changes with a descriptive message
-arguments:
-  - name: MESSAGE
-    description: The commit message
-    type: string
-    required: true
-  - name: PUSH
-    description: Whether to push after commit
-    type: string
-    required: false
-    default: "no"
-    options: ["yes", "no"]
----
-RUN git add .
-RUN git commit -m "$MESSAGE"
+1.  Create a new Go file in the `commands` package (e.g., `commands/my_command.go`).
+2.  In this file, define a handler function for your command. The handler should have the signature `func(ctx context.Context, args map[string]interface{}) error`.
+3.  In an `init()` function in the same file, register your command using the `RegisterBuiltIn` function.
+
+**Example:**
+
+```go
+// commands/my_command.go
+package commands
+
+import (
+	"context"
+	"fmt"
+)
+
+func handleMyCommand(ctx context.Context, args map[string]interface{}) error {
+	fmt.Println("Hello from my command!")
+	return nil
+}
+
+func init() {
+	RegisterBuiltIn(
+		NewCommand("my-command", "My Command", "This is my custom command.").
+			WithType(BuiltinCommand).
+			WithHandler(handleMyCommand).
+			Build(),
+	)
+}
 ```
-
-#### Argument Definition Fields
-
-- **name**: The argument name (must match placeholder in content)
-- **description**: Human-readable description of the argument
-- **type**: Data type (string, int, bool, file, etc.)
-- **required**: Whether the argument is mandatory
-- **default**: Default value if not provided
-- **options**: Array of valid values for enum-like arguments
-
-When you run a command with arguments, OpenCode will prompt you to enter values for each unique placeholder. Named arguments provide several benefits:
-
-- Clear identification of what each argument represents
-- Ability to use the same argument multiple times
-- Better organization for commands with multiple inputs
-- Type validation and default values
-
-### Organizing Commands
-
-You can organize commands in subdirectories:
-
-```
-~/.config/opencode/commands/git/commit.md
-```
-
-This creates a command with ID `user:git:commit`.
-
-### Using Custom Commands
-
-1. Press `Ctrl+K` to open the command dialog
-2. Select your custom command (prefixed with either `user:` or `project:`)
-3. Press Enter to execute the command
-
-The content of the command file will be sent as a message to the AI assistant.
-
-### Built-in Commands
-
-OpenCode includes several built-in commands:
-
-| Command            | Description                                                                                         |
-| ------------------ | --------------------------------------------------------------------------------------------------- |
-| Initialize Project | Creates or updates the OpenCode.md memory file with project-specific information                    |
-| Compact Session    | Manually triggers the summarization of the current session, creating a new session with the summary |
 
 ## MCP (Model Context Protocol)
 

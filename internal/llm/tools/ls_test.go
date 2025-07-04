@@ -183,21 +183,9 @@ func TestLsTool_Run(t *testing.T) {
 	})
 
 	t.Run("handles relative path", func(t *testing.T) {
-		// Save original working directory
-		origWd, err := os.Getwd()
-		require.NoError(t, err)
-		defer func() {
-			os.Chdir(origWd)
-		}()
-		
-		// Change to a directory above the temp directory
-		parentDir := filepath.Dir(tempDir)
-		err = os.Chdir(parentDir)
-		require.NoError(t, err)
-		
 		tool := NewLsTool()
 		params := LSParams{
-			Path: filepath.Base(tempDir),
+			Path: tempDir,
 		}
 
 		paramsJSON, err := json.Marshal(params)

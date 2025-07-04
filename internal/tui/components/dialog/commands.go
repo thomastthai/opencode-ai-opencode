@@ -5,6 +5,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	utilComponents "github.com/opencode-ai/opencode/internal/tui/components/util"
+	"github.com/opencode-ai/opencode/internal/tui/command"
 	"github.com/opencode-ai/opencode/internal/tui/layout"
 	"github.com/opencode-ai/opencode/internal/tui/styles"
 	"github.com/opencode-ai/opencode/internal/tui/theme"
@@ -12,12 +13,9 @@ import (
 )
 
 // Command represents a command that can be executed
-type Command struct {
-	ID          string
-	Title       string
-	Description string
-	Handler     func(cmd Command) tea.Cmd
-}
+type Command command.Command
+
+
 
 func (ci Command) Render(selected bool, width int) string {
 	t := theme.CurrentTheme()
@@ -58,7 +56,7 @@ type CloseCommandDialogMsg struct{}
 type CommandDialog interface {
 	tea.Model
 	layout.Bindings
-	SetCommands(commands []Command)
+	SetCommands(commands []command.Command)
 }
 
 type commandDialogCmp struct {
@@ -162,8 +160,12 @@ func (c *commandDialogCmp) BindingKeys() []key.Binding {
 	return layout.KeyMapToSlice(commandKeys)
 }
 
-func (c *commandDialogCmp) SetCommands(commands []Command) {
-	c.listView.SetItems(commands)
+func (c *commandDialogCmp) SetCommands(commands []command.Command) {
+	dialogCommands := make([]Command, len(commands))
+	for i, cmd := range commands {
+		dialogCommands[i] = Command(cmd)
+	}
+	c.listView.SetItems(dialogCommands)
 }
 
 // NewCommandDialogCmp creates a new command selection dialog

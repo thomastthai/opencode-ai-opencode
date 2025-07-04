@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/opencode-ai/opencode/internal/app"
+	"github.com/opencode-ai/opencode/internal/commands"
 	"github.com/opencode-ai/opencode/internal/config"
 	"github.com/opencode-ai/opencode/internal/db"
 	"github.com/opencode-ai/opencode/internal/format"
@@ -85,6 +86,11 @@ to assist developers in writing, debugging, and understanding code directly from
 		_, err := config.Load(cwd, debug)
 		if err != nil {
 			return err
+		}
+
+		// Load custom commands
+		if err := commands.LoadCustomCommands(); err != nil {
+			logging.Warn("Failed to load custom commands", "error", err)
 		}
 
 		// Connect DB, this will also run migrations

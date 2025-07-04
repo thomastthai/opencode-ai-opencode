@@ -11,8 +11,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
+)
+
+const (
+	// maxCommandFileSize is the maximum size for a command file (1MB).
+	maxCommandFileSize = 1 * 1024 * 1024
 )
 
 // CommandMetadata represents the YAML frontmatter metadata in a command file
@@ -76,6 +82,13 @@ type ScanResult struct {
 	
 	// ScannedPaths contains all directories that were scanned
 	ScannedPaths []string
+}
+
+// Merge merges another ScanResult into this one
+func (sr *ScanResult) Merge(other *ScanResult) {
+	sr.Commands = append(sr.Commands, other.Commands...)
+	sr.Errors = append(sr.Errors, other.Errors...)
+	sr.ScannedPaths = append(sr.ScannedPaths, other.ScannedPaths...)
 }
 
 // ScanOptions configures the scanning behavior
@@ -182,10 +195,24 @@ func (cs *CommandScanner) ScanDirectory(dirPath string, sourceType CommandType) 
 
 // parseCommandFile parses a single command file and extracts metadata and content
 func (cs *CommandScanner) parseCommandFile(filePath, baseDir string, sourceType CommandType) (*ParsedCommand, error) {
+	// Check file size
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file info: %w", err)
+	}
+	if info.Size() > maxCommandFileSize {
+		return nil, fmt.Errorf("file exceeds size limit of %d bytes", maxCommandFileSize)
+	}
+
 	// Read file content
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// Check for valid UTF-8 encoding
+	if !utf8.Valid(content) {
+		return nil, fmt.Errorf("unsupported file encoding, please use UTF-8")
 	}
 	
 	// Get relative path for ID generation

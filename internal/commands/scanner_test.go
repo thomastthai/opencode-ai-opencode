@@ -19,7 +19,7 @@ func TestCommandScanner_parseFrontmatter(t *testing.T) {
 	}{
 		{
 			name: "valid frontmatter",
-			content: `---
+			content: `--- 
 name: Test Command
 description: A test command
 category: testing
@@ -77,7 +77,7 @@ RUN echo "hello world"`,
 		},
 		{
 			name: "empty frontmatter",
-			content: `---
+			content: `--- 
 ---
 Command content here.
 `,
@@ -87,7 +87,7 @@ Command content here.
 		},
 		{
 			name: "invalid yaml",
-			content: `---
+			content: `--- 
 name: Test Command
 invalid: [unclosed array
 ---
@@ -99,7 +99,7 @@ Content here.
 		},
 		{
 			name: "partial frontmatter",
-			content: `---
+			content: `--- 
 name: Partial Command
 description: Only some fields
 ---
@@ -184,25 +184,25 @@ func TestCommandScanner_ScanDirectory(t *testing.T) {
 	// Create test command files
 	testFiles := map[string]string{
 		"simple.md": `RUN echo "simple command"`,
-		"with-frontmatter.md": `---
+		"with-frontmatter.md": `--- 
 name: Test Command
 description: A test command with frontmatter
 category: testing
 hidden: false
 ---
 RUN echo "test command"`,
-		"hidden.md": `---
+		"hidden.md": `--- 
 name: Hidden Command
 hidden: true
 ---
 RUN echo "hidden command"`,
-		"subdir/nested.md": `---
+		"subdir/nested.md": `--- 
 name: Nested Command
 description: A command in a subdirectory
 ---
 RUN echo "nested command"`,
 		"invalid.txt": `This is not a markdown file`,
-		"subdir/deep/deeply-nested.md": `---
+		"subdir/deep/deeply-nested.md": `--- 
 name: Deeply Nested
 ---
 RUN echo "deeply nested"`,
@@ -281,6 +281,20 @@ RUN echo "deeply nested"`,
 		assert.Empty(t, result.Commands)
 		assert.Empty(t, result.Errors)
 	})
+
+	t.Run("handles oversized file", func(t *testing.T) {
+		oversizedFile := filepath.Join(tmpDir, "oversized.md")
+		err := os.WriteFile(oversizedFile, make([]byte, maxCommandFileSize+1), 0644)
+		require.NoError(t, err)
+
+		scanner := NewCommandScanner(DefaultScanOptions())
+		result, err := scanner.ScanDirectory(tmpDir, UserCommand)
+		require.NoError(t, err)
+
+		// Should have one error
+		assert.Len(t, result.Errors, 1)
+		assert.Contains(t, result.Errors[0].Error(), "file exceeds size limit")
+	})
 }
 
 func TestCommandScanner_parseCommandFile(t *testing.T) {
@@ -291,7 +305,7 @@ func TestCommandScanner_parseCommandFile(t *testing.T) {
 
 	// Create test file
 	testFile := filepath.Join(tmpDir, "test-command.md")
-	content := `---
+	content := `--- 
 name: Test Command
 description: A test command
 category: testing
@@ -340,7 +354,7 @@ func TestScanProjectCommands(t *testing.T) {
 
 	// Create test command file
 	testFile := filepath.Join(commandsDir, "project-cmd.md")
-	content := `---
+	content := `--- 
 name: Project Command
 description: A project-specific command
 ---
@@ -376,4 +390,26 @@ func TestNewCommandScanner(t *testing.T) {
 	scanner := NewCommandScanner(opts)
 	assert.NotNil(t, scanner)
 	assert.Equal(t, opts, scanner.options)
+}
+
+func TestScanResult_Merge(t *testing.T) {
+	result1 := &ScanResult{
+		Commands:     []ParsedCommand{{ID: "cmd1"}},
+		Errors:       []error{assert.AnError},
+		ScannedPaths: []string{"/path1"},
+	}
+
+	result2 := &ScanResult{
+		Commands:     []ParsedCommand{{ID: "cmd2"}},
+		Errors:       []error{assert.AnError},
+		ScannedPaths: []string{"/path2"},
+	}
+
+	result1.Merge(result2)
+
+	assert.Len(t, result1.Commands, 2)
+	assert.Len(t, result1.Errors, 2)
+	assert.Len(t, result1.ScannedPaths, 2)
+	assert.Equal(t, "cmd2", result1.Commands[1].ID)
+	assert.Equal(t, "/path2", result1.ScannedPaths[1])
 }

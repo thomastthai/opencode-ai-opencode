@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/opencode-ai/opencode/internal/app"
 	"github.com/opencode-ai/opencode/internal/config"
+	"github.com/opencode-ai/opencode/internal/tui/command"
 	"github.com/opencode-ai/opencode/internal/llm/agent"
 	"github.com/opencode-ai/opencode/internal/logging"
 	"github.com/opencode-ai/opencode/internal/permission"
@@ -119,7 +120,7 @@ type appModel struct {
 
 	showCommandDialog bool
 	commandDialog     dialog.CommandDialog
-	commands          []dialog.Command
+	commands          []command.Command
 
 	showModelDialog bool
 	modelDialog     dialog.ModelDialog
@@ -410,7 +411,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.showCommandDialog = false
 		// Execute the command handler if available
 		if msg.Command.Handler != nil {
-			return a, msg.Command.Handler(msg.Command)
+			return a, msg.Command.Handler(command.Command(msg.Command))
 		}
 		return a, util.ReportInfo("Command selected: " + msg.Command.Title)
 
@@ -664,17 +665,17 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // RegisterCommand adds a command to the command dialog
-func (a *appModel) RegisterCommand(cmd dialog.Command) {
+func (a *appModel) RegisterCommand(cmd command.Command) {
 	a.commands = append(a.commands, cmd)
 }
 
-func (a *appModel) findCommand(id string) (dialog.Command, bool) {
+func (a *appModel) findCommand(id string) (command.Command, bool) {
 	for _, cmd := range a.commands {
 		if cmd.ID == id {
 			return cmd, true
 		}
 	}
-	return dialog.Command{}, false
+	return command.Command{}, false
 }
 
 func (a *appModel) moveToPage(pageID page.PageID) tea.Cmd {
@@ -913,7 +914,7 @@ func New(app *app.App) tea.Model {
 		initDialog:    dialog.NewInitDialogCmp(),
 		themeDialog:   dialog.NewThemeDialogCmp(),
 		app:           app,
-		commands:      []dialog.Command{},
+		commands:      []command.Command{},
 		pages: map[page.PageID]tea.Model{
 			page.ChatPage: page.NewChatPage(app),
 			page.LogsPage: page.NewLogsPage(),
@@ -921,11 +922,11 @@ func New(app *app.App) tea.Model {
 		filepicker: dialog.NewFilepickerCmp(app),
 	}
 
-	model.RegisterCommand(dialog.Command{
+	model.RegisterCommand(command.Command{
 		ID:          "init",
 		Title:       "Initialize Project",
 		Description: "Create/Update the OpenCode.md memory file",
-		Handler: func(cmd dialog.Command) tea.Cmd {
+		Handler: func(cmd command.Command) tea.Cmd {
 			prompt := `Please analyze this codebase and create a OpenCode.md file containing:
 1. Build/lint/test commands - especially for running a single test
 2. Code style guidelines including imports, formatting, types, naming conventions, error handling, etc.
@@ -941,11 +942,11 @@ If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (
 		},
 	})
 
-	model.RegisterCommand(dialog.Command{
+	model.RegisterCommand(command.Command{
 		ID:          "compact",
 		Title:       "Compact Session",
 		Description: "Summarize the current session and create a new one with the summary",
-		Handler: func(cmd dialog.Command) tea.Cmd {
+		Handler: func(cmd command.Command) tea.Cmd {
 			return func() tea.Msg {
 				return startCompactSessionMsg{}
 			}
@@ -957,7 +958,7 @@ If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (
 		logging.Warn("Failed to load custom commands", "error", err)
 	} else {
 		for _, cmd := range customCommands {
-			model.RegisterCommand(cmd)
+			model.RegisterCommand(command.Command(cmd))
 		}
 	}
 

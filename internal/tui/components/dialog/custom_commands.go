@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/opencode-ai/opencode/internal/config"
+	"github.com/opencode-ai/opencode/internal/tui/command"
 	"github.com/opencode-ai/opencode/internal/tui/util"
 )
 
@@ -130,11 +131,11 @@ func loadCommandsFromDir(commandsDir string, prefix string) ([]Command, error) {
 		}
 
 		// Create a command
-		command := Command{
+		cmd := Command(command.Command{
 			ID:          prefix + commandID,
 			Title:       prefix + commandID,
 			Description: fmt.Sprintf("Custom command from %s", relPath),
-			Handler: func(cmd Command) tea.Cmd {
+			Handler: func(cmd command.Command) tea.Cmd {
 				commandContent := string(content)
 
 				// Check for named arguments
@@ -166,9 +167,9 @@ func loadCommandsFromDir(commandsDir string, prefix string) ([]Command, error) {
 					Args:    nil, // No arguments
 				})
 			},
-		}
+		})
 
-		commands = append(commands, command)
+		commands = append(commands, cmd)
 		return nil
 	})
 
