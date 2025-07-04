@@ -49,7 +49,7 @@ type AgentEvent struct {
 type Service interface {
 	pubsub.Suscriber[AgentEvent]
 	Model() models.Model
-	Run(ctx context.Context, sessionID string, content string, attachments ...message.Attachment) (<-chan AgentEvent, error)
+	Run(ctx context.Context, sessionID string, content string, attachments ...message.Attachment) (<-	chan AgentEvent, error)
 	Cancel(sessionID string)
 	IsSessionBusy(sessionID string) bool
 	IsBusy() bool
@@ -208,7 +208,7 @@ func (a *agent) err(err error) AgentEvent {
 	}
 }
 
-func (a *agent) Run(ctx context.Context, sessionID string, content string, attachments ...message.Attachment) (<-chan AgentEvent, error) {
+func (a *agent) Run(ctx context.Context, sessionID string, content string, attachments ...message.Attachment) (<-	chan AgentEvent, error) {
 	if !a.provider.Model().SupportsAttachments && attachments != nil {
 		attachments = nil
 	}
@@ -222,9 +222,17 @@ func (a *agent) Run(ctx context.Context, sessionID string, content string, attac
 	a.ActiveRequests.Store(sessionID, cancel)
 	go func() {
 		logging.Debug("Request started", "sessionID", sessionID)
-		defer logging.RecoverPanic("agent.Run", func() {
-			events <- a.err(fmt.Errorf("panic while running the agent"))
-		})
+		defer func() {
+			if r := recover(); r != nil {
+				logging.ErrorPersist(fmt.Sprintf("Panic in agent.Run: %v", r))
+				events <- a.err(fmt.Errorf("panic while running the agent"))
+			}
+			logging.Debug("Request completed", "sessionID", sessionID)
+			a.ActiveRequests.Delete(sessionID)
+			cancel()
+			close(events)
+		}()
+
 		var attachmentParts []message.ContentPart
 		for _, attachment := range attachments {
 			attachmentParts = append(attachmentParts, message.BinaryContent{Path: attachment.FilePath, MIMEType: attachment.MimeType, Data: attachment.Content})
@@ -233,12 +241,8 @@ func (a *agent) Run(ctx context.Context, sessionID string, content string, attac
 		if result.Error != nil && !errors.Is(result.Error, ErrRequestCancelled) && !errors.Is(result.Error, context.Canceled) {
 			logging.ErrorPersist(result.Error.Error())
 		}
-		logging.Debug("Request completed", "sessionID", sessionID)
-		a.ActiveRequests.Delete(sessionID)
-		cancel()
 		a.Publish(pubsub.CreatedEvent, result)
 		events <- result
-		close(events)
 	}()
 	return events, nil
 }
@@ -297,8 +301,6 @@ func (a *agent) processGeneration(ctx context.Context, sessionID, content string
 		agentMessage, toolResults, err := a.streamAndHandleEvents(ctx, sessionID, msgHistory)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
-				agentMessage.AddFinish(message.FinishReasonCanceled)
-				a.messages.Update(context.Background(), agentMessage)
 				return a.err(ErrRequestCancelled)
 			}
 			return a.err(fmt.Errorf("failed to process events: %w", err))
@@ -310,10 +312,16 @@ func (a *agent) processGeneration(ctx context.Context, sessionID, content string
 		} else {
 			logging.Info("Result", "message", agentMessage.FinishReason(), "toolResults", toolResults)
 		}
-		if (agentMessage.FinishReason() == message.FinishReasonToolUse) && toolResults != nil {
-			// We are not done, we need to respond with the tool response
-			msgHistory = append(msgHistory, agentMessage, *toolResults)
-			continue
+		if agentMessage.FinishReason() == message.FinishReasonToolUse {
+			if toolResults != nil && len(toolResults.Parts) > 0 {
+				// We are not done, we need to respond with the tool response
+				msgHistory = append(msgHistory, agentMessage, *toolResults)
+				continue
+			}
+			// If we are here, it means the model hallucinated a tool use response
+			// without actually calling a tool. We should treat this as an error
+			// and let the user know.
+			return a.err(fmt.Errorf("model hallucinated tool use without calling a tool"))
 		}
 		return AgentEvent{
 			Type:    AgentEventTypeResponse,
@@ -336,7 +344,7 @@ func (a *agent) streamAndHandleEvents(ctx context.Context, sessionID string, msg
 	ctx = context.WithValue(ctx, tools.SessionIDContextKey, sessionID)
 	
 	// Use type assertion to check if provider supports streaming
-	var eventChan <-chan provider.ProviderEvent
+	var eventChan <-	chan provider.ProviderEvent
 	if streamProvider, ok := a.provider.(provider.StreamProvider); ok {
 		eventChan = streamProvider.StreamResponse(ctx, msgHistory, a.tools)
 	} else {
@@ -451,10 +459,10 @@ out:
 		Parts: parts,
 	})
 	if err != nil {
-		return assistantMsg, nil, fmt.Errorf("failed to create cancelled tool message: %w", err)
+		return assistantMsg, nil, fmt.Errorf("failed to create tool message: %w", err)
 	}
 
-	return assistantMsg, &msg, err
+	return assistantMsg, &msg, nil
 }
 
 
@@ -694,22 +702,22 @@ func (a *agent) Summarize(ctx context.Context, sessionID string) error {
 		oldSession.SummaryMessageID = msg.ID
 		oldSession.CompletionTokens = response.Usage.OutputTokens
 		oldSession.PromptTokens = 0
-		model := a.summarizeProvider.Model()
-		usage := response.Usage
-		cost := model.CostPer1MInCached/1e6*float64(usage.CacheCreationTokens) +
-			model.CostPer1MOutCached/1e6*float64(usage.CacheReadTokens) +
-			model.CostPer1MIn/1e6*float64(usage.InputTokens) +
-			model.CostPer1MOut/1e6*float64(usage.OutputTokens)
-		oldSession.Cost += cost
-		_, err = a.sessions.Save(summarizeCtx, oldSession)
-		if err != nil {
-			event = AgentEvent{
-				Type:  AgentEventTypeError,
-				Error: fmt.Errorf("failed to save session: %w", err),
-				Done:  true,
-			}
-			a.Publish(pubsub.CreatedEvent, event)
+	model := a.summarizeProvider.Model()
+	usage := response.Usage
+	cost := model.CostPer1MInCached/1e6*float64(usage.CacheCreationTokens) +
+		model.CostPer1MOutCached/1e6*float64(usage.CacheReadTokens) +
+		model.CostPer1MIn/1e6*float64(usage.InputTokens) +
+		model.CostPer1MOut/1e6*float64(usage.OutputTokens)
+	oldSession.Cost += cost
+	_, err = a.sessions.Save(summarizeCtx, oldSession)
+	if err != nil {
+		event = AgentEvent{
+			Type:  AgentEventTypeError,
+			Error: fmt.Errorf("failed to save session: %w", err),
+			Done:  true,
 		}
+		a.Publish(pubsub.CreatedEvent, event)
+	}
 
 		event = AgentEvent{
 			Type:      AgentEventTypeSummarize,

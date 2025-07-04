@@ -222,11 +222,12 @@ func (c *VertexAIConfig) Validate() error {
 // MockConfig contains mock provider configuration for testing.
 type MockConfig struct {
 	BaseProviderConfig
-	Responses      []string `json:"responses,omitempty"`
-	StreamEvents   []ProviderEvent `json:"streamEvents,omitempty"`
-	ErrorToReturn  string   `json:"errorToReturn,omitempty"`
-	ToolSupport    bool     `json:"toolSupport,omitempty"`
-	StreamSupport  bool     `json:"streamSupport,omitempty"`
+	Responses       []string          `json:"responses,omitempty"`
+	StreamEvents    []ProviderEvent   `json:"streamEvents,omitempty"`
+	StreamEventSets [][]ProviderEvent `json:"streamEventSets,omitempty"`
+	ErrorToReturn   string            `json:"errorToReturn,omitempty"`
+	ToolSupport     bool              `json:"toolSupport,omitempty"`
+	StreamSupport   bool              `json:"streamSupport,omitempty"`
 }
 
 // Validate validates mock configuration.

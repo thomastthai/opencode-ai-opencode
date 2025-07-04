@@ -89,91 +89,65 @@ func (m *MockProvider) SendMessages(ctx context.Context, messages []message.Mess
 // StreamResponse implements StreamProvider interface.
 func (m *MockProvider) StreamResponse(ctx context.Context, messages []message.Message, tools []tools.BaseTool) <-chan ProviderEvent {
 	resultChan := make(chan ProviderEvent, 10)
-	
-	if !m.config.StreamSupport {
-		// If streaming not supported, just send the regular response as a complete event
+
+	m.callCount++
+
 		go func() {
-			defer close(resultChan)
-			
+		defer close(resultChan)
+		if m.config.ErrorToReturn != "" {
+			resultChan <- ProviderEvent{
+				Type:  EventError,
+				Error: fmt.Errorf("%s", m.config.ErrorToReturn),
+			}
+			return
+		}
+
+		if !m.config.StreamSupport {
 			response, err := m.SendMessages(ctx, messages, tools)
 			if err != nil {
-				resultChan <- ProviderEvent{
-					Type:  EventError,
-					Error: err,
-				}
+				resultChan <- ProviderEvent{Type: EventError, Error: err}
 				return
 			}
-			
-			resultChan <- ProviderEvent{
-				Type:     EventComplete,
-				Response: response,
+			resultChan <- ProviderEvent{Type: EventComplete, Response: response}
+			return
+		}
+
+		var eventsToSend []ProviderEvent
+		if len(m.config.StreamEventSets) > 0 {
+			if m.callCount <= len(m.config.StreamEventSets) {
+				eventsToSend = m.config.StreamEventSets[m.callCount-1]
+			} else {
+				// Fallback or error if called more times than configured sets
+				resultChan <- ProviderEvent{Type: EventError, Error: fmt.Errorf("mock provider called more times than StreamEventSets configured")}
+				return
 			}
-		}()
-		
-		return resultChan
-	}
-	
-	// Send configured stream events or generate default ones
-	go func() {
-		defer close(resultChan)
-		
-		if len(m.config.StreamEvents) > 0 {
-			// Send configured events
-			for _, event := range m.config.StreamEvents {
+		} else if len(m.config.StreamEvents) > 0 {
+			eventsToSend = m.config.StreamEvents
+		}
+
+		if len(eventsToSend) > 0 {
+			for _, event := range eventsToSend {
 				select {
-				case resultChan <- event:
 				case <-ctx.Done():
 					return
+				case resultChan <- event:
+					time.Sleep(10 * time.Millisecond) // Simulate streaming delay
 				}
-				time.Sleep(10 * time.Millisecond) // Small delay to simulate streaming
 			}
 		} else {
-			// Generate default streaming events
+			// Default behavior if no events are configured
 			response, err := m.SendMessages(ctx, messages, tools)
 			if err != nil {
-				resultChan <- ProviderEvent{
-					Type:  EventError,
-					Error: err,
-				}
+				resultChan <- ProviderEvent{Type: EventError, Error: err}
 				return
 			}
-			
-			// Simulate streaming by sending content in chunks
-			content := response.Content
-			chunkSize := 10
-			for i := 0; i < len(content); i += chunkSize {
-				end := i + chunkSize
-				if end > len(content) {
-					end = len(content)
-				}
-				
-				chunk := content[i:end]
-				
-				if i == 0 {
-					resultChan <- ProviderEvent{Type: EventContentStart}
-				}
-				
-				resultChan <- ProviderEvent{
-					Type:    EventContentDelta,
-					Content: chunk,
-				}
-				
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					time.Sleep(10 * time.Millisecond)
-				}
-			}
-			
+			resultChan <- ProviderEvent{Type: EventContentStart}
+			resultChan <- ProviderEvent{Type: EventContentDelta, Content: response.Content}
 			resultChan <- ProviderEvent{Type: EventContentStop}
-			resultChan <- ProviderEvent{
-				Type:     EventComplete,
-				Response: response,
-			}
+			resultChan <- ProviderEvent{Type: EventComplete, Response: response}
 		}
 	}()
-	
+
 	return resultChan
 }
 
