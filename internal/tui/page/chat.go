@@ -57,40 +57,33 @@ func (p *chatPage) Init() tea.Cmd {
 
 func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+	var cmd tea.Cmd
 
-	// Handle key messages for completion logic
-	if _, ok := msg.(tea.KeyMsg); ok {
-		editorValue := p.editor.GetValue()
-		// Check for prefix triggers on every key press
-		if strings.HasPrefix(editorValue, "/") && !p.showCompletionDialog {
-			p.completionDialog.SetProvider(p.commandCompletionProvider)
-			p.showCompletionDialog = true
-			// Pass the key message to the dialog to start filtering
-			u, cmd := p.completionDialog.Update(msg)
-			p.completionDialog = u.(dialog.CompletionDialog)
-			cmds = append(cmds, cmd)
-			return p, tea.Batch(cmds...)
-		} else if strings.HasPrefix(editorValue, "@") && !p.showCompletionDialog {
-			p.completionDialog.SetProvider(p.fileCompletionProvider)
-			p.showCompletionDialog = true
-			// Pass the key message to the dialog to start filtering
-			u, cmd := p.completionDialog.Update(msg)
-			p.completionDialog = u.(dialog.CompletionDialog)
-			cmds = append(cmds, cmd)
-			return p, tea.Batch(cmds...)
-		} else if !strings.HasPrefix(editorValue, "/") && !strings.HasPrefix(editorValue, "@") && p.showCompletionDialog {
-			p.showCompletionDialog = false
-		}
+	// Route messages to the layout first, which handles the editor.
+	// This ensures the editor's value is up-to-date for our logic below.
+	updatedLayout, cmd := p.layout.Update(msg)
+	p.layout = updatedLayout.(layout.SplitPaneLayout)
+	cmds = append(cmds, cmd)
+
+	// Check the editor's value to determine completion state.
+	editorValue := p.editor.GetValue()
+	if strings.HasPrefix(editorValue, "/") {
+		p.completionDialog.SetProvider(p.commandCompletionProvider)
+		p.showCompletionDialog = true
+	} else if strings.HasPrefix(editorValue, "@") {
+		p.completionDialog.SetProvider(p.fileCompletionProvider)
+		p.showCompletionDialog = true
+	} else {
+		p.showCompletionDialog = false
 	}
 
-	// Route messages to the appropriate components
+	// Now, handle all other message types.
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		cmd := p.layout.SetSize(msg.Width, msg.Height)
-		cmds = append(cmds, cmd)
 	case dialog.CompletionDialogCloseMsg:
 		p.showCompletionDialog = false
 	case chat.SendMsg:
+		// When a message is sent, clear the completion dialog.
+		p.showCompletionDialog = false
 		cmd := p.sendMessage(msg.Text, msg.Attachments)
 		if cmd != nil {
 			return p, cmd
@@ -119,7 +112,6 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		p.session = msg
 	case tea.KeyMsg:
-		// Handle non-completion key messages
 		switch {
 		case key.Matches(msg, keyMap.NewSession):
 			p.session = session.Session{}
@@ -128,19 +120,28 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				util.CmdHandler(chat.SessionClearedMsg{}),
 			)
 		case key.Matches(msg, keyMap.Cancel):
-			if p.session.ID != "" {
+			if p.showCompletionDialog {
+				p.showCompletionDialog = false
+			} else if p.session.ID != "" {
 				p.app.CoderAgent.Cancel(p.session.ID)
-				return p, nil
 			}
+			return p, nil
 		}
 	}
 
-	// Update the visible component
+	// Update the completion dialog if it's visible
 	if p.showCompletionDialog {
 		context, contextCmd := p.completionDialog.Update(msg)
 		p.completionDialog = context.(dialog.CompletionDialog)
 		cmds = append(cmds, contextCmd)
 	} else {
+		u, cmd := p.layout.Update(msg)
+		p.layout = u.(layout.SplitPaneLayout)
+		cmds = append(cmds, cmd)
+	}
+
+	// Always pass key messages to the layout to update the editor
+	if _, ok := msg.(tea.KeyMsg); ok {
 		u, cmd := p.layout.Update(msg)
 		p.layout = u.(layout.SplitPaneLayout)
 		cmds = append(cmds, cmd)

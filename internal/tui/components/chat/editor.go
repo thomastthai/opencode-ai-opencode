@@ -245,6 +245,10 @@ func (m *EditorCmp) SetSize(width, height int) tea.Cmd {
 	return nil
 }
 
+func (m *EditorCmp) SetValue(s string) {
+	m.textarea.SetValue(s)
+}
+
 func (m *EditorCmp) GetValue() string {
 	return m.textarea.Value()
 }

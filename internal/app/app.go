@@ -39,7 +39,7 @@ type App struct {
 	watcherWG          sync.WaitGroup
 }
 
-func New(ctx context.Context, conn *sql.DB) (*App, error) {
+func New(ctx context.Context, conn *sql.DB, isTest bool) (*App, error) {
 	q := db.New(conn)
 	sessions := session.NewService(q)
 	messages := message.NewService(q)
@@ -56,8 +56,10 @@ func New(ctx context.Context, conn *sql.DB) (*App, error) {
 	// Initialize theme based on configuration
 	app.initTheme()
 
-	// Initialize LSP clients in the background
-	go app.initLSPClients(ctx)
+	// Initialize LSP clients in the background, unless in a test environment
+	if !isTest {
+		go app.initLSPClients(ctx)
+	}
 
 	var err error
 	app.CoderAgent, err = agent.NewAgent(

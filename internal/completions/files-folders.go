@@ -186,6 +186,6 @@ func (cg *filesAndFoldersContextGroup) GetChildEntries(query string) ([]dialog.C
 
 func NewFileAndFolderContextGroup() dialog.CompletionProvider {
 	return &filesAndFoldersContextGroup{
-		prefix: "file",
+		prefix: "files",
 	}
 }

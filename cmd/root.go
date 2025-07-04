@@ -103,7 +103,7 @@ to assist developers in writing, debugging, and understanding code directly from
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		app, err := app.New(ctx, conn)
+		app, err := app.New(ctx, conn, false)
 		if err != nil {
 			logging.Error("Failed to create app: %v", err)
 			return err

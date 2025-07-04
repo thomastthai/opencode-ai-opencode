@@ -81,7 +81,13 @@ type CompletionDialog interface {
 	layout.Bindings
 	SetWidth(width int)
 	SetProvider(provider CompletionProvider)
+	GetId() string
 }
+
+func (c *completionDialogCmp) GetId() string {
+	return c.completionProvider.GetId()
+}
+
 
 func (c *completionDialogCmp) SetProvider(provider CompletionProvider) {
 	c.completionProvider = provider

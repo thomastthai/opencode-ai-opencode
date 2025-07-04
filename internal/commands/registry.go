@@ -87,6 +87,14 @@ func NewCommandRegistry() *CommandRegistry {
 	}
 }
 
+// Clear removes all commands from the registry.
+func (r *CommandRegistry) Clear() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.commands = make(map[string]Command)
+	r.aliases = make(map[string]string)
+}
+
 // Register adds a new command to the registry.
 func (r *CommandRegistry) Register(cmd Command) error {
 	r.mu.Lock()
