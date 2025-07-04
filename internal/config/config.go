@@ -868,6 +868,11 @@ func Get() *Config {
 	return cfg
 }
 
+// Set sets the global configuration instance. This is intended for testing purposes only.
+func Set(c *Config) {
+	cfg = c
+}
+
 // WorkingDirectory returns the current working directory from the configuration.
 func WorkingDirectory() string {
 	if cfg == nil {

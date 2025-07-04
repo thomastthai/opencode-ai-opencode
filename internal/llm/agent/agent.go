@@ -32,6 +32,7 @@ const (
 	AgentEventTypeError     AgentEventType = "error"
 	AgentEventTypeResponse  AgentEventType = "response"
 	AgentEventTypeSummarize AgentEventType = "summarize"
+	AgentEventTypeToolCall  AgentEventType = "tool_call"
 )
 
 type AgentEvent struct {
@@ -67,7 +68,7 @@ type agent struct {
 	titleProvider     provider.Provider
 	summarizeProvider provider.Provider
 
-	activeRequests sync.Map
+	ActiveRequests sync.Map
 }
 
 func NewAgent(
@@ -75,24 +76,36 @@ func NewAgent(
 	sessions session.Service,
 	messages message.Service,
 	agentTools []tools.BaseTool,
+	testProvider ...provider.Provider,
 ) (Service, error) {
-	agentProvider, err := createAgentProvider(agentName)
-	if err != nil {
-		return nil, err
-	}
-	var titleProvider provider.Provider
-	// Only generate titles for the coder agent
-	if agentName == config.AgentCoder {
-		titleProvider, err = createAgentProvider(config.AgentTitle)
+	var agentProvider, titleProvider, summarizeProvider provider.Provider
+	var err error
+
+	if len(testProvider) > 0 {
+		agentProvider = testProvider[0]
+		if len(testProvider) > 1 {
+			titleProvider = testProvider[1]
+		}
+		if len(testProvider) > 2 {
+			summarizeProvider = testProvider[2]
+		}
+	} else {
+		agentProvider, err = createAgentProvider(agentName)
 		if err != nil {
 			return nil, err
 		}
-	}
-	var summarizeProvider provider.Provider
-	if agentName == config.AgentCoder {
-		summarizeProvider, err = createAgentProvider(config.AgentSummarizer)
-		if err != nil {
-			return nil, err
+		// Only generate titles for the coder agent
+		if agentName == config.AgentCoder {
+			titleProvider, err = createAgentProvider(config.AgentTitle)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if agentName == config.AgentCoder {
+			summarizeProvider, err = createAgentProvider(config.AgentSummarizer)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -104,7 +117,7 @@ func NewAgent(
 		tools:             agentTools,
 		titleProvider:     titleProvider,
 		summarizeProvider: summarizeProvider,
-		activeRequests:    sync.Map{},
+		ActiveRequests:    sync.Map{},
 	}
 
 	return agent, nil
@@ -116,7 +129,7 @@ func (a *agent) Model() models.Model {
 
 func (a *agent) Cancel(sessionID string) {
 	// Cancel regular requests
-	if cancelFunc, exists := a.activeRequests.LoadAndDelete(sessionID); exists {
+	if cancelFunc, exists := a.ActiveRequests.LoadAndDelete(sessionID); exists {
 		if cancel, ok := cancelFunc.(context.CancelFunc); ok {
 			logging.InfoPersist(fmt.Sprintf("Request cancellation initiated for session: %s", sessionID))
 			cancel()
@@ -124,7 +137,7 @@ func (a *agent) Cancel(sessionID string) {
 	}
 
 	// Also check for summarize requests
-	if cancelFunc, exists := a.activeRequests.LoadAndDelete(sessionID + "-summarize"); exists {
+	if cancelFunc, exists := a.ActiveRequests.LoadAndDelete(sessionID + "-summarize"); exists {
 		if cancel, ok := cancelFunc.(context.CancelFunc); ok {
 			logging.InfoPersist(fmt.Sprintf("Summarize cancellation initiated for session: %s", sessionID))
 			cancel()
@@ -134,7 +147,7 @@ func (a *agent) Cancel(sessionID string) {
 
 func (a *agent) IsBusy() bool {
 	busy := false
-	a.activeRequests.Range(func(key, value interface{}) bool {
+	a.ActiveRequests.Range(func(key, value interface{}) bool {
 		if cancelFunc, ok := value.(context.CancelFunc); ok {
 			if cancelFunc != nil {
 				busy = true
@@ -147,7 +160,7 @@ func (a *agent) IsBusy() bool {
 }
 
 func (a *agent) IsSessionBusy(sessionID string) bool {
-	_, busy := a.activeRequests.Load(sessionID)
+	_, busy := a.ActiveRequests.Load(sessionID)
 	return busy
 }
 
@@ -206,7 +219,7 @@ func (a *agent) Run(ctx context.Context, sessionID string, content string, attac
 
 	genCtx, cancel := context.WithCancel(ctx)
 
-	a.activeRequests.Store(sessionID, cancel)
+	a.ActiveRequests.Store(sessionID, cancel)
 	go func() {
 		logging.Debug("Request started", "sessionID", sessionID)
 		defer logging.RecoverPanic("agent.Run", func() {
@@ -221,7 +234,7 @@ func (a *agent) Run(ctx context.Context, sessionID string, content string, attac
 			logging.ErrorPersist(result.Error.Error())
 		}
 		logging.Debug("Request completed", "sessionID", sessionID)
-		a.activeRequests.Delete(sessionID)
+		a.ActiveRequests.Delete(sessionID)
 		cancel()
 		a.Publish(pubsub.CreatedEvent, result)
 		events <- result
@@ -444,6 +457,7 @@ out:
 	return assistantMsg, &msg, err
 }
 
+
 func (a *agent) finishMessage(ctx context.Context, msg *message.Message, finishReson message.FinishReason) {
 	msg.AddFinish(finishReson)
 	_ = a.messages.Update(ctx, *msg)
@@ -553,10 +567,10 @@ func (a *agent) Summarize(ctx context.Context, sessionID string) error {
 	summarizeCtx, cancel := context.WithCancel(ctx)
 
 	// Store the cancel function in activeRequests to allow cancellation
-	a.activeRequests.Store(sessionID+"-summarize", cancel)
+	a.ActiveRequests.Store(sessionID+"-summarize", cancel)
 
 	go func() {
-		defer a.activeRequests.Delete(sessionID + "-summarize")
+		defer a.ActiveRequests.Delete(sessionID + "-summarize")
 		defer cancel()
 		event := AgentEvent{
 			Type:     AgentEventTypeSummarize,

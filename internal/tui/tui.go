@@ -1,20 +1,13 @@
 package tui
 
 import (
-	"context"
-	"fmt"
-	"strings"
-
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/opencode-ai/opencode/internal/app"
 	"github.com/opencode-ai/opencode/internal/config"
 	"github.com/opencode-ai/opencode/internal/tui/command"
-	"github.com/opencode-ai/opencode/internal/llm/agent"
 	"github.com/opencode-ai/opencode/internal/logging"
-	"github.com/opencode-ai/opencode/internal/permission"
-	"github.com/opencode-ai/opencode/internal/pubsub"
 	"github.com/opencode-ai/opencode/internal/session"
 	"github.com/opencode-ai/opencode/internal/tui/components/chat"
 	"github.com/opencode-ai/opencode/internal/tui/components/core"
@@ -183,13 +176,17 @@ func (a appModel) Init() tea.Cmd {
 func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	var cmd tea.Cmd
+
+	// Always update the status bar
+	s, _ := a.status.Update(msg)
+	a.status = s.(core.StatusCmp)
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		msg.Height -= 1 // Make space for the status bar
 		a.width, a.height = msg.Width, msg.Height
 
-		s, _ := a.status.Update(msg)
-		a.status = s.(core.StatusCmp)
+		// Propagate the window size message to all components
 		a.pages[a.currentPage], cmd = a.pages[a.currentPage].Update(msg)
 		cmds = append(cmds, cmd)
 
@@ -221,368 +218,14 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.multiArgumentsDialog = args.(dialog.MultiArgumentsDialogCmp)
 			cmds = append(cmds, argsCmd, a.multiArgumentsDialog.Init())
 		}
-
 		return a, tea.Batch(cmds...)
-	// Status
-	case util.InfoMsg:
-		s, cmd := a.status.Update(msg)
-		a.status = s.(core.StatusCmp)
-		cmds = append(cmds, cmd)
-		return a, tea.Batch(cmds...)
-	case pubsub.Event[logging.LogMessage]:
-		if msg.Payload.Persist {
-			switch msg.Payload.Level {
-			case "error":
-				s, cmd := a.status.Update(util.InfoMsg{
-					Type: util.InfoTypeError,
-					Msg:  msg.Payload.Message,
-					TTL:  msg.Payload.PersistTime,
-				})
-				a.status = s.(core.StatusCmp)
-				cmds = append(cmds, cmd)
-			case "info":
-				s, cmd := a.status.Update(util.InfoMsg{
-					Type: util.InfoTypeInfo,
-					Msg:  msg.Payload.Message,
-					TTL:  msg.Payload.PersistTime,
-				})
-				a.status = s.(core.StatusCmp)
-				cmds = append(cmds, cmd)
-
-			case "warn":
-				s, cmd := a.status.Update(util.InfoMsg{
-					Type: util.InfoTypeWarn,
-					Msg:  msg.Payload.Message,
-					TTL:  msg.Payload.PersistTime,
-				})
-
-				a.status = s.(core.StatusCmp)
-				cmds = append(cmds, cmd)
-			default:
-				s, cmd := a.status.Update(util.InfoMsg{
-					Type: util.InfoTypeInfo,
-					Msg:  msg.Payload.Message,
-					TTL:  msg.Payload.PersistTime,
-				})
-				a.status = s.(core.StatusCmp)
-				cmds = append(cmds, cmd)
-			}
-		}
-	case util.ClearStatusMsg:
-		s, _ := a.status.Update(msg)
-		a.status = s.(core.StatusCmp)
-
-	// Permission
-	case pubsub.Event[permission.PermissionRequest]:
-		a.showPermissions = true
-		return a, a.permissions.SetPermissions(msg.Payload)
-	case dialog.PermissionResponseMsg:
-		var cmd tea.Cmd
-		switch msg.Action {
-		case dialog.PermissionAllow:
-			a.app.Permissions.Grant(msg.Permission)
-		case dialog.PermissionAllowForSession:
-			a.app.Permissions.GrantPersistant(msg.Permission)
-		case dialog.PermissionDeny:
-			a.app.Permissions.Deny(msg.Permission)
-		}
-		a.showPermissions = false
-		return a, cmd
-
-	case page.PageChangeMsg:
-		return a, a.moveToPage(msg.ID)
-
-	case dialog.CloseQuitMsg:
-		a.showQuit = false
-		return a, nil
-
-	case dialog.CloseSessionDialogMsg:
-		a.showSessionDialog = false
-		return a, nil
-
-	case dialog.CloseCommandDialogMsg:
-		a.showCommandDialog = false
-		return a, nil
-
-	case startCompactSessionMsg:
-		// Start compacting the current session
-		a.isCompacting = true
-		a.compactingMessage = "Starting summarization..."
-
-		if a.selectedSession.ID == "" {
-			a.isCompacting = false
-			return a, util.ReportWarn("No active session to summarize")
-		}
-
-		// Start the summarization process
-		return a, func() tea.Msg {
-			ctx := context.Background()
-			a.app.CoderAgent.Summarize(ctx, a.selectedSession.ID)
-			return nil
-		}
-
-	case pubsub.Event[agent.AgentEvent]:
-		payload := msg.Payload
-		if payload.Error != nil {
-			a.isCompacting = false
-			return a, util.ReportError(payload.Error)
-		}
-
-		a.compactingMessage = payload.Progress
-
-		if payload.Done && payload.Type == agent.AgentEventTypeSummarize {
-			a.isCompacting = false
-			return a, util.ReportInfo("Session summarization complete")
-		} else if payload.Done && payload.Type == agent.AgentEventTypeResponse && a.selectedSession.ID != "" {
-			model := a.app.CoderAgent.Model()
-			contextWindow := model.ContextWindow
-			tokens := a.selectedSession.CompletionTokens + a.selectedSession.PromptTokens
-			if (tokens >= int64(float64(contextWindow)*0.95)) && config.Get().AutoCompact {
-				return a, util.CmdHandler(startCompactSessionMsg{})
-			}
-		}
-		// Continue listening for events
-		return a, nil
-
-	case dialog.CloseThemeDialogMsg:
-		a.showThemeDialog = false
-		return a, nil
-
-	case dialog.ThemeChangedMsg:
-		a.pages[a.currentPage], cmd = a.pages[a.currentPage].Update(msg)
-		a.showThemeDialog = false
-		return a, tea.Batch(cmd, util.ReportInfo("Theme changed to: "+msg.ThemeName))
-
-	case dialog.CloseModelDialogMsg:
-		a.showModelDialog = false
-		return a, nil
-
-	case dialog.ModelSelectedMsg:
-		a.showModelDialog = false
-
-		model, err := a.app.CoderAgent.Update(config.AgentCoder, msg.Model.ID)
-		if err != nil {
-			return a, util.ReportError(err)
-		}
-
-		return a, util.ReportInfo(fmt.Sprintf("Model changed to %s", model.Name))
-
-	case dialog.ShowInitDialogMsg:
-		a.showInitDialog = msg.Show
-		return a, nil
-
-	case dialog.CloseInitDialogMsg:
-		a.showInitDialog = false
-		if msg.Initialize {
-			// Run the initialization command
-			for _, cmd := range a.commands {
-				if cmd.ID == "init" {
-					// Mark the project as initialized
-					if err := config.MarkProjectInitialized(); err != nil {
-						return a, util.ReportError(err)
-					}
-					return a, cmd.Handler(cmd)
-				}
-			}
-		} else {
-			// Mark the project as initialized without running the command
-			if err := config.MarkProjectInitialized(); err != nil {
-				return a, util.ReportError(err)
-			}
-		}
-		return a, nil
-
-	case chat.SessionSelectedMsg:
-		a.selectedSession = msg
-		a.sessionDialog.SetSelectedSession(msg.ID)
-
-	case pubsub.Event[session.Session]:
-		if msg.Type == pubsub.UpdatedEvent && msg.Payload.ID == a.selectedSession.ID {
-			a.selectedSession = msg.Payload
-		}
-	case dialog.SessionSelectedMsg:
-		a.showSessionDialog = false
-		if a.currentPage == page.ChatPage {
-			return a, util.CmdHandler(chat.SessionSelectedMsg(msg.Session))
-		}
-		return a, nil
-
-	case dialog.CommandSelectedMsg:
-		a.showCommandDialog = false
-		// Execute the command handler if available
-		if msg.Command.Handler != nil {
-			return a, msg.Command.Handler(command.Command(msg.Command))
-		}
-		return a, util.ReportInfo("Command selected: " + msg.Command.Title)
-
-	case dialog.ShowMultiArgumentsDialogMsg:
-		// Show multi-arguments dialog
-		a.multiArgumentsDialog = dialog.NewMultiArgumentsDialogCmp(msg.CommandID, msg.Content, msg.ArgNames)
-		a.showMultiArgumentsDialog = true
-		return a, a.multiArgumentsDialog.Init()
-
-	case dialog.CloseMultiArgumentsDialogMsg:
-		// Close multi-arguments dialog
-		a.showMultiArgumentsDialog = false
-
-		// If submitted, replace all named arguments and run the command
-		if msg.Submit {
-			content := msg.Content
-
-			// Replace each named argument with its value
-			for name, value := range msg.Args {
-				placeholder := "$" + name
-				content = strings.ReplaceAll(content, placeholder, value)
-			}
-
-			// Execute the command with arguments
-			return a, util.CmdHandler(dialog.CommandRunCustomMsg{
-				Content: content,
-				Args:    msg.Args,
-			})
-		}
-		return a, nil
-
-	case tea.KeyMsg:
-		// If multi-arguments dialog is open, let it handle the key press first
-		if a.showMultiArgumentsDialog {
-			args, cmd := a.multiArgumentsDialog.Update(msg)
-			a.multiArgumentsDialog = args.(dialog.MultiArgumentsDialogCmp)
-			return a, cmd
-		}
-
-		switch {
-
-		case key.Matches(msg, keys.Quit):
-			a.showQuit = !a.showQuit
-			if a.showHelp {
-				a.showHelp = false
-			}
-			if a.showSessionDialog {
-				a.showSessionDialog = false
-			}
-			if a.showCommandDialog {
-				a.showCommandDialog = false
-			}
-			if a.showFilepicker {
-				a.showFilepicker = false
-				a.filepicker.ToggleFilepicker(a.showFilepicker)
-			}
-			if a.showModelDialog {
-				a.showModelDialog = false
-			}
-			if a.showMultiArgumentsDialog {
-				a.showMultiArgumentsDialog = false
-			}
-			return a, nil
-		case key.Matches(msg, keys.SwitchSession):
-			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && !a.showCommandDialog {
-				// Load sessions and show the dialog
-				sessions, err := a.app.Sessions.List(context.Background())
-				if err != nil {
-					return a, util.ReportError(err)
-				}
-				if len(sessions) == 0 {
-					return a, util.ReportWarn("No sessions available")
-				}
-				a.sessionDialog.SetSessions(sessions)
-				a.showSessionDialog = true
-				return a, nil
-			}
-			return a, nil
-		case key.Matches(msg, keys.Commands):
-			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && !a.showSessionDialog && !a.showThemeDialog && !a.showFilepicker {
-				// Show commands dialog
-				if len(a.commands) == 0 {
-					return a, util.ReportWarn("No commands available")
-				}
-				a.commandDialog.SetCommands(a.commands)
-				a.showCommandDialog = true
-				return a, nil
-			}
-			return a, nil
-		case key.Matches(msg, keys.Models):
-			if a.showModelDialog {
-				a.showModelDialog = false
-				return a, nil
-			}
-			if a.currentPage == page.ChatPage && !a.showQuit && !a.showPermissions && !a.showSessionDialog && !a.showCommandDialog {
-				a.showModelDialog = true
-				return a, nil
-			}
-			return a, nil
-		case key.Matches(msg, keys.SwitchTheme):
-			if !a.showQuit && !a.showPermissions && !a.showSessionDialog && !a.showCommandDialog {
-				// Show theme switcher dialog
-				a.showThemeDialog = true
-				// Theme list is dynamically loaded by the dialog component
-				return a, a.themeDialog.Init()
-			}
-			return a, nil
-		case key.Matches(msg, returnKey) || key.Matches(msg):
-			if msg.String() == quitKey {
-				if a.currentPage == page.LogsPage {
-					return a, a.moveToPage(page.ChatPage)
-				}
-			} else if !a.filepicker.IsCWDFocused() {
-				if a.showQuit {
-					a.showQuit = !a.showQuit
-					return a, nil
-				}
-				if a.showHelp {
-					a.showHelp = !a.showHelp
-					return a, nil
-				}
-				if a.showInitDialog {
-					a.showInitDialog = false
-					// Mark the project as initialized without running the command
-					if err := config.MarkProjectInitialized(); err != nil {
-						return a, util.ReportError(err)
-					}
-					return a, nil
-				}
-				if a.showFilepicker {
-					a.showFilepicker = false
-					a.filepicker.ToggleFilepicker(a.showFilepicker)
-					return a, nil
-				}
-				if a.currentPage == page.LogsPage {
-					return a, a.moveToPage(page.ChatPage)
-				}
-			}
-		case key.Matches(msg, keys.Logs):
-			return a, a.moveToPage(page.LogsPage)
-		case key.Matches(msg, keys.Help):
-			if a.showQuit {
-				return a, nil
-			}
-			a.showHelp = !a.showHelp
-			return a, nil
-		case key.Matches(msg, helpEsc):
-			if a.app.CoderAgent.IsBusy() {
-				if a.showQuit {
-					return a, nil
-				}
-				a.showHelp = !a.showHelp
-				return a, nil
-			}
-		case key.Matches(msg, keys.Filepicker):
-			a.showFilepicker = !a.showFilepicker
-			a.filepicker.ToggleFilepicker(a.showFilepicker)
-			return a, nil
-		}
-	default:
-		f, filepickerCmd := a.filepicker.Update(msg)
-		a.filepicker = f.(dialog.FilepickerCmp)
-		cmds = append(cmds, filepickerCmd)
-
 	}
 
+	// Handle all other messages
 	if a.showFilepicker {
 		f, filepickerCmd := a.filepicker.Update(msg)
 		a.filepicker = f.(dialog.FilepickerCmp)
 		cmds = append(cmds, filepickerCmd)
-		// Only block key messages send all other messages down
 		if _, ok := msg.(tea.KeyMsg); ok {
 			return a, tea.Batch(cmds...)
 		}
@@ -592,16 +235,15 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		q, quitCmd := a.quit.Update(msg)
 		a.quit = q.(dialog.QuitDialog)
 		cmds = append(cmds, quitCmd)
-		// Only block key messages send all other messages down
 		if _, ok := msg.(tea.KeyMsg); ok {
 			return a, tea.Batch(cmds...)
 		}
 	}
+
 	if a.showPermissions {
 		d, permissionsCmd := a.permissions.Update(msg)
 		a.permissions = d.(dialog.PermissionDialogCmp)
 		cmds = append(cmds, permissionsCmd)
-		// Only block key messages send all other messages down
 		if _, ok := msg.(tea.KeyMsg); ok {
 			return a, tea.Batch(cmds...)
 		}
@@ -611,7 +253,6 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		d, sessionCmd := a.sessionDialog.Update(msg)
 		a.sessionDialog = d.(dialog.SessionDialog)
 		cmds = append(cmds, sessionCmd)
-		// Only block key messages send all other messages down
 		if _, ok := msg.(tea.KeyMsg); ok {
 			return a, tea.Batch(cmds...)
 		}
@@ -621,7 +262,6 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		d, commandCmd := a.commandDialog.Update(msg)
 		a.commandDialog = d.(dialog.CommandDialog)
 		cmds = append(cmds, commandCmd)
-		// Only block key messages send all other messages down
 		if _, ok := msg.(tea.KeyMsg); ok {
 			return a, tea.Batch(cmds...)
 		}
@@ -631,7 +271,6 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		d, modelCmd := a.modelDialog.Update(msg)
 		a.modelDialog = d.(dialog.ModelDialog)
 		cmds = append(cmds, modelCmd)
-		// Only block key messages send all other messages down
 		if _, ok := msg.(tea.KeyMsg); ok {
 			return a, tea.Batch(cmds...)
 		}
@@ -641,7 +280,6 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		d, initCmd := a.initDialog.Update(msg)
 		a.initDialog = d.(dialog.InitDialogCmp)
 		cmds = append(cmds, initCmd)
-		// Only block key messages send all other messages down
 		if _, ok := msg.(tea.KeyMsg); ok {
 			return a, tea.Batch(cmds...)
 		}
@@ -651,16 +289,15 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		d, themeCmd := a.themeDialog.Update(msg)
 		a.themeDialog = d.(dialog.ThemeDialog)
 		cmds = append(cmds, themeCmd)
-		// Only block key messages send all other messages down
 		if _, ok := msg.(tea.KeyMsg); ok {
 			return a, tea.Batch(cmds...)
 		}
 	}
 
-	s, _ := a.status.Update(msg)
-	a.status = s.(core.StatusCmp)
+	// If no dialog is active, pass the message to the current page
 	a.pages[a.currentPage], cmd = a.pages[a.currentPage].Update(msg)
 	cmds = append(cmds, cmd)
+
 	return a, tea.Batch(cmds...)
 }
 
