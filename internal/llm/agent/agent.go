@@ -312,16 +312,13 @@ func (a *agent) processGeneration(ctx context.Context, sessionID, content string
 		} else {
 			logging.Info("Result", "message", agentMessage.FinishReason(), "toolResults", toolResults)
 		}
-		if agentMessage.FinishReason() == message.FinishReasonToolUse {
-			if toolResults != nil && len(toolResults.Parts) > 0 {
-				// We are not done, we need to respond with the tool response
-				msgHistory = append(msgHistory, agentMessage, *toolResults)
-				continue
+				if agentMessage.FinishReason() == message.FinishReasonToolUse {
+			if toolResults == nil || len(toolResults.Parts) == 0 {
+				logging.Error("Provider returned FinishReasonToolUse without toolResults; emitting error event")
+				return a.err(fmt.Errorf("model hallucinated tool use without calling a tool"))
 			}
-			// If we are here, it means the model hallucinated a tool use response
-			// without actually calling a tool. We should treat this as an error
-			// and let the user know.
-			return a.err(fmt.Errorf("model hallucinated tool use without calling a tool"))
+			msgHistory = append(msgHistory, agentMessage, *toolResults)
+			continue
 		}
 		return AgentEvent{
 			Type:    AgentEventTypeResponse,
