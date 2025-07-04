@@ -80,7 +80,13 @@ type CompletionDialog interface {
 	tea.Model
 	layout.Bindings
 	SetWidth(width int)
+	SetProvider(provider CompletionProvider)
 }
+
+func (c *completionDialogCmp) SetProvider(provider CompletionProvider) {
+	c.completionProvider = provider
+}
+
 
 type completionDialogCmp struct {
 	query                string

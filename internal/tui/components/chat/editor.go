@@ -23,7 +23,7 @@ import (
 	"github.com/opencode-ai/opencode/internal/tui/util"
 )
 
-type editorCmp struct {
+type EditorCmp struct {
 	width       int
 	height      int
 	app         *app.App
@@ -79,7 +79,7 @@ const (
 	maxAttachments = 5
 )
 
-func (m *editorCmp) openEditor() tea.Cmd {
+func (m *EditorCmp) openEditor() tea.Cmd {
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
 		editor = "nvim"
@@ -115,11 +115,11 @@ func (m *editorCmp) openEditor() tea.Cmd {
 	})
 }
 
-func (m *editorCmp) Init() tea.Cmd {
+func (m *EditorCmp) Init() tea.Cmd {
 	return textarea.Blink
 }
 
-func (m *editorCmp) send() tea.Cmd {
+func (m *EditorCmp) send() tea.Cmd {
 	if m.app.CoderAgent.IsSessionBusy(m.session.ID) {
 		return util.ReportWarn("Agent is working, please wait...")
 	}
@@ -140,7 +140,7 @@ func (m *editorCmp) send() tea.Cmd {
 	)
 }
 
-func (m *editorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *EditorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case dialog.ThemeChangedMsg:
@@ -216,7 +216,7 @@ func (m *editorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *editorCmp) View() string {
+func (m *EditorCmp) View() string {
 	t := theme.CurrentTheme()
 
 	// Style the prompt with theme colors
@@ -236,7 +236,7 @@ func (m *editorCmp) View() string {
 	)
 }
 
-func (m *editorCmp) SetSize(width, height int) tea.Cmd {
+func (m *EditorCmp) SetSize(width, height int) tea.Cmd {
 	m.width = width
 	m.height = height
 	m.textarea.SetWidth(width - 3) // account for the prompt and padding right
@@ -245,11 +245,15 @@ func (m *editorCmp) SetSize(width, height int) tea.Cmd {
 	return nil
 }
 
-func (m *editorCmp) GetSize() (int, int) {
+func (m *EditorCmp) GetValue() string {
+	return m.textarea.Value()
+}
+
+func (m *EditorCmp) GetSize() (int, int) {
 	return m.textarea.Width(), m.textarea.Height()
 }
 
-func (m *editorCmp) attachmentsContent() string {
+func (m *EditorCmp) attachmentsContent() string {
 	var styledAttachments []string
 	t := theme.CurrentTheme()
 	attachmentStyles := styles.BaseStyle().
@@ -272,7 +276,7 @@ func (m *editorCmp) attachmentsContent() string {
 	return content
 }
 
-func (m *editorCmp) BindingKeys() []key.Binding {
+func (m *EditorCmp) BindingKeys() []key.Binding {
 	bindings := []key.Binding{}
 	bindings = append(bindings, layout.KeyMapToSlice(editorMaps)...)
 	bindings = append(bindings, layout.KeyMapToSlice(DeleteKeyMaps)...)
@@ -311,7 +315,7 @@ func CreateTextArea(existing *textarea.Model) textarea.Model {
 
 func NewEditorCmp(app *app.App) tea.Model {
 	ta := CreateTextArea(nil)
-	return &editorCmp{
+	return &EditorCmp{
 		app:      app,
 		textarea: ta,
 	}

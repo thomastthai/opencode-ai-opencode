@@ -20,26 +20,23 @@ import (
 var ChatPage PageID = "chat"
 
 type chatPage struct {
-	app                  *app.App
-	editor               layout.Container
-	messages             layout.Container
-	layout               layout.SplitPaneLayout
-	session              session.Session
-	completionDialog     dialog.CompletionDialog
-	showCompletionDialog bool
+	app                     *app.App
+	editor               *chat.EditorCmp
+	messages                layout.Container
+	layout                  layout.SplitPaneLayout
+	session                 session.Session
+	completionDialog        dialog.CompletionDialog
+	showCompletionDialog    bool
+	fileCompletionProvider  dialog.CompletionProvider
+	commandCompletionProvider dialog.CompletionProvider
 }
 
 type ChatKeyMap struct {
-	ShowCompletionDialog key.Binding
-	NewSession           key.Binding
-	Cancel               key.Binding
+	NewSession key.Binding
+	Cancel     key.Binding
 }
 
 var keyMap = ChatKeyMap{
-	ShowCompletionDialog: key.NewBinding(
-		key.WithKeys("@"),
-		key.WithHelp("@", "Complete"),
-	),
 	NewSession: key.NewBinding(
 		key.WithKeys("ctrl+n"),
 		key.WithHelp("ctrl+n", "new session"),
@@ -76,7 +73,7 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if p.app.CoderAgent.IsBusy() {
 			return p, util.ReportWarn("Agent is busy, please wait before executing a command...")
 		}
-		
+
 		// Process the command content with arguments if any
 		content := msg.Content
 		if msg.Args != nil {
@@ -86,7 +83,7 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				content = strings.ReplaceAll(content, placeholder, value)
 			}
 		}
-		
+
 		// Handle custom command execution
 		cmd := p.sendMessage(content, nil)
 		if cmd != nil {
@@ -101,10 +98,18 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		p.session = msg
 	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, keyMap.ShowCompletionDialog):
+		editorValue := p.editor.GetValue()
+		if strings.HasPrefix(editorValue, "/") {
+			p.completionDialog.SetProvider(p.commandCompletionProvider)
 			p.showCompletionDialog = true
-			// Continue sending keys to layout->chat
+		} else if strings.HasPrefix(editorValue, "@") {
+			p.completionDialog.SetProvider(p.fileCompletionProvider)
+			p.showCompletionDialog = true
+		} else {
+			p.showCompletionDialog = false
+		}
+
+		switch {
 		case key.Matches(msg, keyMap.NewSession):
 			p.session = session.Session{}
 			return p, tea.Batch(
@@ -213,25 +218,33 @@ func (p *chatPage) BindingKeys() []key.Binding {
 }
 
 func NewChatPage(app *app.App) tea.Model {
-	cg := completions.NewFileAndFolderContextGroup()
-	completionDialog := dialog.NewCompletionDialogCmp(cg)
+	fileCompletionProvider := completions.NewFileAndFolderContextGroup()
+	commandCompletionProvider := completions.NewCommandCompletionProvider()
+
+	completionDialog := dialog.NewCompletionDialogCmp(fileCompletionProvider)
 
 	messagesContainer := layout.NewContainer(
 		chat.NewMessagesCmp(app),
 		layout.WithPadding(1, 1, 0, 1),
 	)
+
+	editorCmp := chat.NewEditorCmp(app)
+
 	editorContainer := layout.NewContainer(
-		chat.NewEditorCmp(app),
+		editorCmp,
 		layout.WithBorder(true, false, false, false),
 	)
 	return &chatPage{
-		app:              app,
-		editor:           editorContainer,
-		messages:         messagesContainer,
-		completionDialog: completionDialog,
+		app:                     app,
+		editor:                  editorCmp.(*chat.EditorCmp),
+		messages:                messagesContainer,
+		completionDialog:        completionDialog,
+		fileCompletionProvider:  fileCompletionProvider,
+		commandCompletionProvider: commandCompletionProvider,
 		layout: layout.NewSplitPane(
 			layout.WithLeftPanel(messagesContainer),
 			layout.WithBottomPanel(editorContainer),
 		),
 	}
 }
+
