@@ -57,6 +57,33 @@ func (p *chatPage) Init() tea.Cmd {
 
 func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+
+	// Handle key messages for completion logic
+	if _, ok := msg.(tea.KeyMsg); ok {
+		editorValue := p.editor.GetValue()
+		// Check for prefix triggers on every key press
+		if strings.HasPrefix(editorValue, "/") && !p.showCompletionDialog {
+			p.completionDialog.SetProvider(p.commandCompletionProvider)
+			p.showCompletionDialog = true
+			// Pass the key message to the dialog to start filtering
+			u, cmd := p.completionDialog.Update(msg)
+			p.completionDialog = u.(dialog.CompletionDialog)
+			cmds = append(cmds, cmd)
+			return p, tea.Batch(cmds...)
+		} else if strings.HasPrefix(editorValue, "@") && !p.showCompletionDialog {
+			p.completionDialog.SetProvider(p.fileCompletionProvider)
+			p.showCompletionDialog = true
+			// Pass the key message to the dialog to start filtering
+			u, cmd := p.completionDialog.Update(msg)
+			p.completionDialog = u.(dialog.CompletionDialog)
+			cmds = append(cmds, cmd)
+			return p, tea.Batch(cmds...)
+		} else if !strings.HasPrefix(editorValue, "/") && !strings.HasPrefix(editorValue, "@") && p.showCompletionDialog {
+			p.showCompletionDialog = false
+		}
+	}
+
+	// Route messages to the appropriate components
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		cmd := p.layout.SetSize(msg.Width, msg.Height)
@@ -69,22 +96,16 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return p, cmd
 		}
 	case dialog.CommandRunCustomMsg:
-		// Check if the agent is busy before executing custom commands
 		if p.app.CoderAgent.IsBusy() {
 			return p, util.ReportWarn("Agent is busy, please wait before executing a command...")
 		}
-
-		// Process the command content with arguments if any
 		content := msg.Content
 		if msg.Args != nil {
-			// Replace all named arguments with their values
 			for name, value := range msg.Args {
 				placeholder := "$" + name
 				content = strings.ReplaceAll(content, placeholder, value)
 			}
 		}
-
-		// Handle custom command execution
 		cmd := p.sendMessage(content, nil)
 		if cmd != nil {
 			return p, cmd
@@ -98,17 +119,7 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		p.session = msg
 	case tea.KeyMsg:
-		editorValue := p.editor.GetValue()
-		if strings.HasPrefix(editorValue, "/") {
-			p.completionDialog.SetProvider(p.commandCompletionProvider)
-			p.showCompletionDialog = true
-		} else if strings.HasPrefix(editorValue, "@") {
-			p.completionDialog.SetProvider(p.fileCompletionProvider)
-			p.showCompletionDialog = true
-		} else {
-			p.showCompletionDialog = false
-		}
-
+		// Handle non-completion key messages
 		switch {
 		case key.Matches(msg, keyMap.NewSession):
 			p.session = session.Session{}
@@ -118,29 +129,22 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 		case key.Matches(msg, keyMap.Cancel):
 			if p.session.ID != "" {
-				// Cancel the current session's generation process
-				// This allows users to interrupt long-running operations
 				p.app.CoderAgent.Cancel(p.session.ID)
 				return p, nil
 			}
 		}
 	}
+
+	// Update the visible component
 	if p.showCompletionDialog {
 		context, contextCmd := p.completionDialog.Update(msg)
 		p.completionDialog = context.(dialog.CompletionDialog)
 		cmds = append(cmds, contextCmd)
-
-		// Doesn't forward event if enter key is pressed
-		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			if keyMsg.String() == "enter" {
-				return p, tea.Batch(cmds...)
-			}
-		}
+	} else {
+		u, cmd := p.layout.Update(msg)
+		p.layout = u.(layout.SplitPaneLayout)
+		cmds = append(cmds, cmd)
 	}
-
-	u, cmd := p.layout.Update(msg)
-	cmds = append(cmds, cmd)
-	p.layout = u.(layout.SplitPaneLayout)
 
 	return p, tea.Batch(cmds...)
 }

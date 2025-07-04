@@ -28,16 +28,35 @@ func (p *commandCompletionProvider) GetChildEntries(query string) ([]dialog.Comp
 	var items []dialog.CompletionItemI
 	allCommands := commands.GetGlobalRegistry().List()
 
-	for _, cmd := range allCommands {
-		// Filter commands based on the query.
-		// The query will not include the leading slash.
-		if strings.HasPrefix(cmd.ID(), query) {
-			items = append(items, &dialog.CompletionItem{
-				Title:       cmd.Name(),
-				Value:       "/" + cmd.ID(),
-			})
+	parts := strings.Split(query, ":")
+	if len(parts) == 1 {
+		// Top-level command search
+		for _, cmd := range allCommands {
+			if cmd.GetParent() == nil && strings.HasPrefix(cmd.ID(), query) {
+				items = append(items, &dialog.CompletionItem{
+					Title: cmd.Name(),
+					Value: "/" + cmd.ID(),
+				})
+			}
+		}
+	} else {
+		// Sub-command search
+		parentID := strings.Join(parts[:len(parts)-1], ":")
+		subQuery := parts[len(parts)-1]
+
+		parentCmd, found := commands.GetGlobalRegistry().Get(parentID)
+		if found {
+			for _, subCmd := range parentCmd.GetSubCommands() {
+				if strings.HasPrefix(subCmd.ID(), parentID+":"+subQuery) {
+					items = append(items, &dialog.CompletionItem{
+						Title: subCmd.Name(),
+						Value: "/" + subCmd.ID(),
+					})
+				}
+			}
 		}
 	}
+
 	return items, nil
 }
 
