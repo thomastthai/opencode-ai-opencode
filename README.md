@@ -23,6 +23,7 @@ OpenCode is a Go-based CLI application that brings AI assistance to your termina
 ## Features
 
 - **Interactive TUI**: Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) for a smooth terminal experience
+- **Enhanced Command System**: Powerful slash command interface with search, categorization, and visual grouping
 - **Multiple AI Providers**: Support for OpenAI, Anthropic Claude, Google Gemini, AWS Bedrock, Groq, Azure OpenAI, and OpenRouter
 - **Session Management**: Save and manage multiple conversation sessions
 - **Tool Integration**: AI can execute commands, search files, and modify code
@@ -31,7 +32,7 @@ OpenCode is a Go-based CLI application that brings AI assistance to your termina
 - **LSP Integration**: Language Server Protocol support for code intelligence
 - **File Change Tracking**: Track and visualize file changes during sessions
 - **External Editor Support**: Open your preferred editor for composing messages
-- **Named Arguments for Custom Commands**: Create powerful custom commands with multiple named placeholders
+- **Custom Commands**: Create powerful custom commands with multiple named placeholders
 
 ## Installation
 
@@ -335,7 +336,7 @@ The output format is implemented as a strongly-typed `OutputFormat` in the codeb
 | `?`      | Toggle help dialog (when not in editing mode)           |
 | `Ctrl+L` | View logs                                               |
 | `Ctrl+A` | Switch session                                          |
-| `Ctrl+K` | Command dialog                                          |
+| `Ctrl+K` | Enhanced command palette with search and categorization |
 | `Ctrl+O` | Toggle model selection dialog                           |
 | `Esc`    | Close current overlay/dialog or return to previous mode |
 
@@ -375,6 +376,17 @@ The output format is implemented as a strongly-typed `OutputFormat` in the codeb
 | `←` or `h` | Previous provider |
 | `→` or `l` | Next provider     |
 | `Esc`      | Close dialog      |
+
+### Command Dialog Shortcuts
+
+| Shortcut        | Action                                    |
+| --------------- | ----------------------------------------- |
+| `↑` or `k`      | Navigate up through commands              |
+| `↓` or `j`      | Navigate down through commands            |
+| `Enter`         | Execute selected command                  |
+| `/`             | Enter search mode                         |
+| `Ctrl+U`        | Clear search filter                       |
+| `Esc`           | Close dialog or exit search mode          |
 
 ### Permission Dialog Shortcuts
 
@@ -434,22 +446,73 @@ OpenCode is built with a modular architecture:
 - **internal/session**: Session management
 - **internal/lsp**: Language Server Protocol integration
 
+## Enhanced Command System
+
+OpenCode features a powerful slash command interface that provides quick access to both built-in commands and custom user-defined commands.
+
+### Built-in Commands
+
+OpenCode includes essential built-in commands that are available immediately:
+
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `/help` | `/h` | Show available commands and keyboard shortcuts |
+| `/exit` | `/quit`, `/q` | Exit OpenCode application |
+| `/clear` | `/cls`, `/new` | Clear current session and start a new one |
+| `/list` | `/ls`, `/commands` | List all available commands |
+| `/init` | | Initialize project with OpenCode.md memory file |
+| `/compact` | `/summary` | Summarize current session and create new one |
+
+### Command Palette Features
+
+Access the enhanced command palette with `Ctrl+K`:
+
+#### **Visual Organization**
+- **⚡ Built-in Commands**: Core OpenCode functionality
+- **👤 User Commands**: Personal commands available across all projects  
+- **📁 Project Commands**: Project-specific commands
+
+#### **Smart Search**
+- Press `/` to enter search mode
+- Real-time filtering as you type
+- Search across command names, descriptions, aliases, and categories
+- Press `Esc` to clear search or exit search mode
+
+#### **Recently Used**
+- Commands automatically track usage frequency
+- Quick access to your most frequently used commands
+- Smart sorting based on recent activity
+
+#### **Enhanced Navigation**
+- `↑↓` or `k/j` to navigate commands
+- Visual grouping with section headers and icons
+- Command aliases displayed for easy discovery
+- Contextual help text at the bottom
+
+### Command Execution
+
+Commands are executed differently based on their type:
+
+1. **Built-in Commands**: Execute immediately with their defined behavior
+2. **Custom Commands**: Send their content as prompts to the AI assistant
+3. **Parameterized Commands**: Show arguments dialog for commands with `$VARIABLE` placeholders
+
 ## Custom Commands
 
 OpenCode supports custom commands that can be created by users to quickly send predefined prompts to the AI assistant.
 
 ### Creating Custom Commands
 
-Custom commands are predefined prompts stored as Markdown files in one of three locations:
+Custom commands are predefined prompts stored as Markdown files in one of these locations:
 
-1.  **User Commands** (prefixed with `user:`):
+1.  **👤 User Commands**: Available across all projects
     -   `$XDG_CONFIG_HOME/opencode/commands/` (e.g., `~/.config/opencode/commands/`)
     -   `$HOME/.opencode/commands/`
 
-2.  **Project Commands** (prefixed with `project:`):
+2.  **📁 Project Commands**: Specific to the current project
     -   `<PROJECT DIR>/.opencode/commands/`
 
-Each `.md` file in these directories becomes a custom command. The file name (without the `.md` extension) becomes the command's ID.
+Each `.md` file in these directories becomes a custom command. The file name (without the `.md` extension) becomes the command's ID. Commands are automatically categorized and displayed with appropriate icons in the command palette.
 
 ### Command Format
 

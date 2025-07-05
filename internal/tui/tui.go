@@ -1,10 +1,14 @@
 package tui
 
 import (
+	"strings"
+	"time"
+	
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/opencode-ai/opencode/internal/app"
+	"github.com/opencode-ai/opencode/internal/commands"
 	"github.com/opencode-ai/opencode/internal/config"
 	"github.com/opencode-ai/opencode/internal/tui/command"
 	"github.com/opencode-ai/opencode/internal/logging"
@@ -219,6 +223,61 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, argsCmd, a.multiArgumentsDialog.Init())
 		}
 		return a, tea.Batch(cmds...)
+
+	// Handle command selection - CRITICAL FIX
+	case dialog.CommandSelectedMsg:
+		a.showCommandDialog = false
+		cmd := command.Command(msg.Command)
+		
+		// Track command usage
+		a.updateCommandUsage(cmd.ID)
+		
+		// Handle built-in commands with handlers
+		if cmd.Handler != nil {
+			return a, cmd.Handler(cmd)
+		}
+		
+		// Handle custom commands with placeholders
+		if cmd.HasPlaceholders() {
+			// Show arguments dialog for commands with placeholders
+			return a, a.showArgumentsDialog(cmd)
+		}
+		
+		// Handle custom commands without placeholders
+		if cmd.Content != "" {
+			return a, util.CmdHandler(dialog.CommandRunCustomMsg{
+				Content: cmd.Content,
+			})
+		}
+		
+		return a, nil
+
+	case dialog.CloseCommandDialogMsg:
+		a.showCommandDialog = false
+		return a, nil
+
+	// Handle key messages for global shortcuts
+	case tea.KeyMsg:
+		switch {
+		case key.Matches(msg, keys.Commands) && !a.showCommandDialog:
+			a.showCommandDialog = true
+			a.commandDialog.SetCommands(a.commands)
+			return a, nil
+		case key.Matches(msg, keys.Help) && !a.showHelp:
+			a.showHelp = true
+			return a, nil
+		case key.Matches(msg, keys.SwitchSession) && !a.showSessionDialog:
+			a.showSessionDialog = true
+			return a, nil
+		case key.Matches(msg, keys.Quit):
+			return a, tea.Quit
+		}
+
+	// Handle compact session message
+	case startCompactSessionMsg:
+		a.isCompacting = true
+		a.compactingMessage = "Preparing to compact session..."
+		return a, nil
 	}
 
 	// Handle all other messages
@@ -313,6 +372,117 @@ func (a *appModel) findCommand(id string) (command.Command, bool) {
 		}
 	}
 	return command.Command{}, false
+}
+
+// showArgumentsDialog shows the arguments dialog for commands with placeholders
+func (a *appModel) showArgumentsDialog(cmd command.Command) tea.Cmd {
+	// For now, just execute the command without arguments
+	// TODO: Implement proper arguments dialog
+	if cmd.Content != "" {
+		return util.CmdHandler(dialog.CommandRunCustomMsg{
+			Content: cmd.Content,
+		})
+	}
+	return nil
+}
+
+// convertRegistryCommand converts a registry command to a TUI command
+func convertRegistryCommand(regCmd commands.Command) command.Command {
+	return command.Command{
+		ID:          regCmd.ID(),
+		Title:       regCmd.Name(),
+		Description: regCmd.Description(),
+		Content:     "", // Registry commands don't have content
+		Scope:       command.BuiltinScope, // Registry commands are built-in
+		Category:    regCmd.Category(),
+		Aliases:     regCmd.GetAliases(),
+		Handler:     createBuiltinHandler(regCmd),
+	}
+}
+
+// createBuiltinHandler creates a handler for built-in commands
+func createBuiltinHandler(regCmd commands.Command) func(cmd command.Command) tea.Cmd {
+	return func(cmd command.Command) tea.Cmd {
+		switch regCmd.ID() {
+		case "init":
+			prompt := `Please analyze this codebase and create a OpenCode.md file containing:
+1. Build/lint/test commands - especially for running a single test
+2. Code style guidelines including imports, formatting, types, naming conventions, error handling, etc.
+
+The file you create will be given to agentic coding agents (such as yourself) that operate in this repository. Make it about 20 lines long.
+If there's already a opencode.md, improve it.
+If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (in .github/copilot-instructions.md), make sure to include them.`
+			return util.CmdHandler(chat.SendMsg{
+				Text: prompt,
+			})
+		case "compact":
+			return func() tea.Msg {
+				return startCompactSessionMsg{}
+			}
+		case "exit", "quit", "q":
+			return tea.Quit
+		case "clear", "cls", "new":
+			return util.CmdHandler(chat.SessionClearedMsg{})
+		case "help", "h":
+			// Show help dialog or help content
+			return nil
+		case "list", "ls", "commands":
+			// This could show command list in a message
+			return nil
+		default:
+			// For other built-in commands, try to execute via registry
+			return nil
+		}
+	}
+}
+
+// determineCommandScope determines if a custom command is user or project scope
+func determineCommandScope(commandID string) command.CommandScope {
+	if strings.HasPrefix(commandID, "user:") {
+		return command.UserScope
+	} else if strings.HasPrefix(commandID, "project:") {
+		return command.ProjectScope
+	}
+	// Default to user scope for backwards compatibility
+	return command.UserScope
+}
+
+// updateCommandUsage updates the last used time for a command
+func (a *appModel) updateCommandUsage(commandID string) {
+	for i, cmd := range a.commands {
+		if cmd.ID == commandID {
+			a.commands[i].LastUsed = time.Now()
+			break
+		}
+	}
+}
+
+// getRecentlyUsedCommands returns commands sorted by recently used
+func (a *appModel) getRecentlyUsedCommands() []command.Command {
+	var recentCommands []command.Command
+	
+	// Get commands that have been used (have LastUsed set)
+	for _, cmd := range a.commands {
+		if !cmd.LastUsed.IsZero() {
+			recentCommands = append(recentCommands, cmd)
+		}
+	}
+	
+	// Sort by most recently used
+	for i := 0; i < len(recentCommands)-1; i++ {
+		for j := i + 1; j < len(recentCommands); j++ {
+			if recentCommands[i].LastUsed.Before(recentCommands[j].LastUsed) {
+				recentCommands[i], recentCommands[j] = recentCommands[j], recentCommands[i]
+			}
+		}
+	}
+	
+	// Return top 5 most recent
+	if len(recentCommands) > 5 {
+		recentCommands = recentCommands[:5]
+	}
+	
+	return recentCommands
 }
 
 func (a *appModel) moveToPage(pageID page.PageID) tea.Cmd {
@@ -559,43 +729,27 @@ func New(app *app.App) tea.Model {
 		filepicker: dialog.NewFilepickerCmp(app),
 	}
 
-	model.RegisterCommand(command.Command{
-		ID:          "init",
-		Title:       "Initialize Project",
-		Description: "Create/Update the OpenCode.md memory file",
-		Handler: func(cmd command.Command) tea.Cmd {
-			prompt := `Please analyze this codebase and create a OpenCode.md file containing:
-1. Build/lint/test commands - especially for running a single test
-2. Code style guidelines including imports, formatting, types, naming conventions, error handling, etc.
-
-The file you create will be given to agentic coding agents (such as yourself) that operate in this repository. Make it about 20 lines long.
-If there's already a opencode.md, improve it.
-If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (in .github/copilot-instructions.md), make sure to include them.`
-			return tea.Batch(
-				util.CmdHandler(chat.SendMsg{
-					Text: prompt,
-				}),
-			)
-		},
-	})
-
-	model.RegisterCommand(command.Command{
-		ID:          "compact",
-		Title:       "Compact Session",
-		Description: "Summarize the current session and create a new one with the summary",
-		Handler: func(cmd command.Command) tea.Cmd {
-			return func() tea.Msg {
-				return startCompactSessionMsg{}
-			}
-		},
-	})
+	// Load commands from registry system
+	registry := commands.GetGlobalRegistry()
+	registryCommands := registry.List()
+	
+	// Convert registry commands to TUI commands
+	for _, regCmd := range registryCommands {
+		tuiCmd := convertRegistryCommand(regCmd)
+		model.RegisterCommand(tuiCmd)
+	}
+	
 	// Load custom commands
 	customCommands, err := dialog.LoadCustomCommands()
 	if err != nil {
 		logging.Warn("Failed to load custom commands", "error", err)
 	} else {
 		for _, cmd := range customCommands {
-			model.RegisterCommand(command.Command(cmd))
+			// Convert custom commands and set their scope
+			tuiCmd := command.Command(cmd)
+			tuiCmd.Scope = determineCommandScope(cmd.ID)
+			tuiCmd.Source = "custom"
+			model.RegisterCommand(tuiCmd)
 		}
 	}
 
