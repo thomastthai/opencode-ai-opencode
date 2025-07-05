@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/opencode-ai/opencode/internal/config"
@@ -69,6 +71,14 @@ type agent struct {
 	summarizeProvider provider.Provider
 
 	ActiveRequests sync.Map
+	t              *testing.T
+}
+
+// testLog logs a message only when in test context
+func (a *agent) testLog(args ...interface{}) {
+	if a.t != nil {
+		a.t.Log(args...)
+	}
 }
 
 func NewAgent(
@@ -76,6 +86,7 @@ func NewAgent(
 	sessions session.Service,
 	messages message.Service,
 	agentTools []tools.BaseTool,
+	t *testing.T,
 	testProvider ...provider.Provider,
 ) (Service, error) {
 	var agentProvider, titleProvider, summarizeProvider provider.Provider
@@ -118,6 +129,7 @@ func NewAgent(
 		titleProvider:     titleProvider,
 		summarizeProvider: summarizeProvider,
 		ActiveRequests:    sync.Map{},
+		t:                 t,
 	}
 
 	return agent, nil
@@ -223,10 +235,11 @@ func (a *agent) Run(ctx context.Context, sessionID string, content string, attac
 	go func() {
 		logging.Debug("Request started", "sessionID", sessionID)
 		defer func() {
-			if r := recover(); r != nil {
-				logging.ErrorPersist(fmt.Sprintf("Panic in agent.Run: %v", r))
-				events <- a.err(fmt.Errorf("panic while running the agent"))
-			}
+            if r := recover(); r != nil {
+                fmt.Printf("Panic in agent.Run: %v\n%s", r, debug.Stack())
+                logging.ErrorPersist(fmt.Sprintf("Panic in agent.Run: %v\n%s", r, debug.Stack()))
+                events <- a.err(fmt.Errorf("panic while running the agent"))
+            }
 			logging.Debug("Request completed", "sessionID", sessionID)
 			a.ActiveRequests.Delete(sessionID)
 			cancel()
@@ -248,7 +261,12 @@ func (a *agent) Run(ctx context.Context, sessionID string, content string, attac
 }
 
 func (a *agent) processGeneration(ctx context.Context, sessionID, content string, attachmentParts []message.ContentPart) AgentEvent {
+	a.testLog("checkpoint 1")
 	cfg := config.Get()
+	if cfg == nil {
+		// In test context, use minimal defaults
+		cfg = &config.Config{Debug: false}
+	}
 	// List existing messages; if none, start title generation asynchronously.
 	msgs, err := a.messages.List(ctx, sessionID)
 	if err != nil {
@@ -299,6 +317,7 @@ func (a *agent) processGeneration(ctx context.Context, sessionID, content string
 			// Continue processing
 		}
 		agentMessage, toolResults, err := a.streamAndHandleEvents(ctx, sessionID, msgHistory)
+		a.testLog("checkpoint 2", "toolResults_is_nil", toolResults == nil, "err", err)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				return a.err(ErrRequestCancelled)
@@ -313,6 +332,7 @@ func (a *agent) processGeneration(ctx context.Context, sessionID, content string
 			logging.Info("Result", "message", agentMessage.FinishReason(), "toolResults", toolResults)
 		}
 				if agentMessage.FinishReason() == message.FinishReasonToolUse {
+			a.testLog("checkpoint 3")
 			if toolResults == nil || len(toolResults.Parts) == 0 {
 				logging.Error("Provider returned FinishReasonToolUse without toolResults; emitting error event")
 				return a.err(fmt.Errorf("model hallucinated tool use without calling a tool"))
@@ -374,6 +394,7 @@ func (a *agent) streamAndHandleEvents(ctx context.Context, sessionID string, msg
 
 	toolResults := make([]message.ToolResult, len(assistantMsg.ToolCalls()))
 	toolCalls := assistantMsg.ToolCalls()
+	a.testLog("toolCalls", "toolCalls", toolCalls)
 	for i, toolCall := range toolCalls {
 		select {
 		case <-ctx.Done():
@@ -417,6 +438,7 @@ func (a *agent) streamAndHandleEvents(ctx context.Context, sessionID string, msg
 				Name:  toolCall.Name,
 				Input: toolCall.Input,
 			})
+			logging.Debug("tool.Run result", "toolResult", toolResult, "toolErr", toolErr)
 			if toolErr != nil {
 				if errors.Is(toolErr, permission.ErrorPermissionDenied) {
 					toolResults[i] = message.ToolResult{

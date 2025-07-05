@@ -73,6 +73,7 @@ func New(ctx context.Context, conn *sql.DB, isTest bool) (*App, error) {
 			app.History,
 			app.LSPClients,
 		),
+		nil,
 	)
 	if err != nil {
 		logging.Error("Failed to create coder agent", err)

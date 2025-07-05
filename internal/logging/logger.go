@@ -98,6 +98,9 @@ func RecoverPanic(name string, cleanup func()) {
 var MessageDir string
 
 func GetSessionPrefix(sessionId string) string {
+	if len(sessionId) < 8 {
+		return sessionId
+	}
 	return sessionId[:8]
 }
 

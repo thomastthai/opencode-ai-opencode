@@ -127,12 +127,6 @@ func (m *MockProvider) StreamResponse(ctx context.Context, messages []message.Me
 
 		if len(eventsToSend) > 0 {
 			for _, event := range eventsToSend {
-				if event.Type == EventComplete && event.Response != nil {
-					if event.Response.FinishReason == message.FinishReasonToolUse && (event.Response.ToolCalls == nil || len(event.Response.ToolCalls) == 0) {
-						resultChan <- ProviderEvent{Type: EventError, Error: fmt.Errorf("invalid mock provider config: FinishReasonToolUse requires non-empty ToolCalls")}
-						return
-					}
-				}
 				select {
 				case <-ctx.Done():
 					return

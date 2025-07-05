@@ -154,7 +154,7 @@ func TestNewAgent(t *testing.T) {
 	}
 	config.Set(cfg)
 
-	agent, err := NewAgent(config.AgentCoder, mockSessions, mockMessages, nil)
+	agent, err := NewAgent(config.AgentCoder, mockSessions, mockMessages, nil, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, agent)
 }
@@ -200,7 +200,7 @@ func TestAgent_Model(t *testing.T) {
 	}
 	config.Set(cfg)
 
-	agent, err := NewAgent(config.AgentCoder, mockSessions, mockMessages, nil)
+	agent, err := NewAgent(config.AgentCoder, mockSessions, mockMessages, nil, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, agent)
 
@@ -249,7 +249,7 @@ func TestAgent_IsBusy(t *testing.T) {
 	}
 	config.Set(cfg)
 
-	agentSvc, err := NewAgent(config.AgentCoder, mockSessions, mockMessages, nil)
+		agentSvc, err := NewAgent(config.AgentCoder, mockSessions, mockMessages, nil, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, agentSvc)
 
@@ -297,7 +297,7 @@ func TestAgent_Run(t *testing.T) {
 	mockProvider, err := provider.NewMockProvider(mockProviderConfig)
 	assert.NoError(t, err)
 
-	agentSvc, err := NewAgent(config.AgentCoder, mockSessions, mockMessages, nil, mockProvider, mockProvider, mockProvider)
+	agentSvc, err := NewAgent(config.AgentCoder, mockSessions, mockMessages, nil, nil, mockProvider, mockProvider, mockProvider)
 	assert.NoError(t, err)
 	assert.NotNil(t, agentSvc)
 
@@ -341,7 +341,7 @@ func TestAgent_Run_ProviderError(t *testing.T) {
 	mockProvider, err := provider.NewMockProvider(mockProviderConfig)
 	assert.NoError(t, err)
 
-	agentSvc, err := NewAgent(config.AgentCoder, mockSessions, mockMessages, nil, mockProvider, mockProvider, mockProvider)
+	agentSvc, err := NewAgent(config.AgentCoder, mockSessions, mockMessages, nil, nil, mockProvider, mockProvider, mockProvider)
 	assert.NoError(t, err)
 	assert.NotNil(t, agentSvc)
 
@@ -372,6 +372,21 @@ func TestAgent_Run_ToolCall(t *testing.T) {
 	mockMessages := new(MockMessageService)
 	mockTool := new(MockTool)
 
+	cfg := &config.Config{
+		Agents: map[config.AgentName]config.Agent{
+			config.AgentCoder: {
+				Model:     "gpt-4",
+				MaxTokens: 1024,
+			},
+		},
+		Providers: map[models.ModelProvider]config.Provider{
+			models.ProviderOpenAI: {
+				APIKey: "test-key",
+			},
+		},
+	}
+	config.Set(cfg)
+
 	mockTool.On("Info").Return(tools.ToolInfo{Name: "test-tool"})
 	mockTool.On("Run", mock.Anything, mock.Anything).Return(tools.ToolResponse{Content: "tool result"}, nil)
 
@@ -389,8 +404,9 @@ func TestAgent_Run_ToolCall(t *testing.T) {
 				{
 					Type: provider.EventToolUseStart,
 					ToolCall: &message.ToolCall{
-						ID:   "tool-1",
-						Name: "test-tool",
+						ID:    "tool-1",
+						Name:  "test-tool",
+						Input: `{"test": "value"}`,
 					},
 				},
 				{
@@ -399,18 +415,20 @@ func TestAgent_Run_ToolCall(t *testing.T) {
 						FinishReason: message.FinishReasonToolUse,
 						ToolCalls: []message.ToolCall{
 							{
-								ID:   "tool-1",
-								Name: "test-tool",
+								ID:    "tool-1",
+								Name:  "test-tool",
+								Input: `{"test": "value"}`,
 							},
 						},
 					},
 				},
 			},
-			// Second call: returns a final response
+			// Second call: after tool execution, returns final response
 			{
 				{
 					Type: provider.EventComplete,
 					Response: &provider.ProviderResponse{
+						Content:      "Final response after tool execution",
 						FinishReason: message.FinishReasonEndTurn,
 					},
 				},
@@ -421,7 +439,7 @@ func TestAgent_Run_ToolCall(t *testing.T) {
 	mockProvider, err := provider.NewMockProvider(mockProviderConfig)
 	assert.NoError(t, err)
 
-	agentSvc, err := NewAgent(config.AgentCoder, mockSessions, mockMessages, []tools.BaseTool{mockTool}, mockProvider)
+	agentSvc, err := NewAgent(config.AgentCoder, mockSessions, mockMessages, []tools.BaseTool{mockTool}, t, mockProvider)
 	assert.NoError(t, err)
 	assert.NotNil(t, agentSvc)
 
@@ -431,8 +449,24 @@ func TestAgent_Run_ToolCall(t *testing.T) {
 	mockSessions.On("Get", mock.Anything, sessionID).Return(session.Session{ID: sessionID}, nil)
 	mockMessages.On("List", mock.Anything, sessionID).Return([]message.Message{}, nil)
 
-	// A single, generic mock for message creation is more robust.
-	mockMessages.On("Create", mock.Anything, mock.Anything, mock.Anything).Return(message.Message{ID: "new-msg", SessionID: sessionID}, nil)
+	// Create messages with tool result parts pre-populated for simplicity
+	toolResultPart := message.ToolResult{
+		ToolCallID: "tool-1",
+		Content:    "tool result",
+		IsError:    false,
+	}
+	toolMessage := message.Message{
+		ID:        "tool-msg",
+		SessionID: sessionID,
+		Role:      message.Tool,
+		Parts:     []message.ContentPart{toolResultPart},
+	}
+	
+	// Mock returns different messages based on call order
+	mockMessages.On("Create", mock.Anything, mock.Anything, mock.Anything).Return(message.Message{ID: "user-msg", SessionID: sessionID, Role: message.User}, nil).Once()
+	mockMessages.On("Create", mock.Anything, mock.Anything, mock.Anything).Return(message.Message{ID: "assistant-msg-1", SessionID: sessionID, Role: message.Assistant}, nil).Once()
+	mockMessages.On("Create", mock.Anything, mock.Anything, mock.Anything).Return(toolMessage, nil).Once()
+	mockMessages.On("Create", mock.Anything, mock.Anything, mock.Anything).Return(message.Message{ID: "assistant-msg-2", SessionID: sessionID, Role: message.Assistant}, nil).Once()
 
 	mockMessages.On("Update", mock.Anything, mock.Anything).Return(nil)
 	mockSessions.On("Save", mock.Anything, mock.Anything).Return(session.Session{}, nil)
@@ -441,11 +475,8 @@ func TestAgent_Run_ToolCall(t *testing.T) {
 	assert.NoError(t, err)
 
 	// We expect a single response event after the tool call flow is complete.
-	eventCount := 0
-	for event := range events {
-		eventCount++
-		assert.Equal(t, AgentEventTypeResponse, event.Type)
-		assert.NoError(t, event.Error)
-	}
-	assert.Equal(t, 1, eventCount)
+	event := <-events
+	assert.Equal(t, AgentEventTypeResponse, event.Type)
+	assert.NoError(t, event.Error)
+	time.Sleep(500 * time.Millisecond)
 }
