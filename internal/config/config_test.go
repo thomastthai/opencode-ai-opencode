@@ -464,6 +464,254 @@ func TestLoadGitHubToken_NoToken(t *testing.T) {
 	assert.Contains(t, err.Error(), "GitHub token not found")
 }
 
+func TestLoadGeminiToken(t *testing.T) {
+	// Test environment variable
+	os.Setenv("GEMINI_TOKEN", "env-token")
+	defer os.Unsetenv("GEMINI_TOKEN")
+	
+	token, err := LoadGeminiToken()
+	assert.NoError(t, err)
+	assert.Equal(t, "env-token", token)
+}
+
+func TestLoadGeminiToken_NoToken(t *testing.T) {
+	// Save original environment variables
+	originalToken := os.Getenv("GEMINI_TOKEN")
+	originalHome := os.Getenv("HOME")
+	originalXDG := os.Getenv("XDG_CONFIG_HOME")
+	
+	// Clean up environment variables
+	os.Unsetenv("GEMINI_TOKEN")
+	
+	// Set a temporary HOME directory to avoid nil pointer issues
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	os.Unsetenv("XDG_CONFIG_HOME")
+	
+	// Restore original environment variables after test
+	defer func() {
+		if originalToken != "" {
+			os.Setenv("GEMINI_TOKEN", originalToken)
+		}
+		if originalHome != "" {
+			os.Setenv("HOME", originalHome)
+		}
+		if originalXDG != "" {
+			os.Setenv("XDG_CONFIG_HOME", originalXDG)
+		}
+	}()
+	
+	_, err := LoadGeminiToken()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Gemini token not found")
+}
+
+func TestLoadGeminiToken_FromOAuthFile(t *testing.T) {
+	// Save original environment variables
+	originalToken := os.Getenv("GEMINI_TOKEN")
+	originalHome := os.Getenv("HOME")
+	originalXDG := os.Getenv("XDG_CONFIG_HOME")
+	
+	// Clean up environment variables
+	os.Unsetenv("GEMINI_TOKEN")
+	
+	// Create temporary directory structure
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	os.Unsetenv("XDG_CONFIG_HOME")
+	
+	// Create the OAuth credentials file
+	configDir := filepath.Join(tmpDir, ".config", "gemini")
+	err := os.MkdirAll(configDir, 0700)
+	require.NoError(t, err)
+	
+	oauthFile := filepath.Join(configDir, "oauth_creds.json")
+	oauthData := `{
+		"access_token": "oauth-access-token",
+		"refresh_token": "oauth-refresh-token",
+		"token_type": "Bearer",
+		"expiry": "2024-12-31T23:59:59Z"
+	}`
+	err = os.WriteFile(oauthFile, []byte(oauthData), 0600)
+	require.NoError(t, err)
+	
+	// Restore original environment variables after test
+	defer func() {
+		if originalToken != "" {
+			os.Setenv("GEMINI_TOKEN", originalToken)
+		}
+		if originalHome != "" {
+			os.Setenv("HOME", originalHome)
+		}
+		if originalXDG != "" {
+			os.Setenv("XDG_CONFIG_HOME", originalXDG)
+		}
+	}()
+	
+	token, err := LoadGeminiToken()
+	assert.NoError(t, err)
+	assert.Equal(t, "oauth-access-token", token)
+}
+
+func TestLoadGeminiToken_XDGConfigHome(t *testing.T) {
+	// Save original environment variables
+	originalToken := os.Getenv("GEMINI_TOKEN")
+	originalHome := os.Getenv("HOME")
+	originalXDG := os.Getenv("XDG_CONFIG_HOME")
+	
+	// Clean up environment variables
+	os.Unsetenv("GEMINI_TOKEN")
+	
+	// Create temporary directory structure
+	tmpDir := t.TempDir()
+	xdgConfigDir := filepath.Join(tmpDir, "xdg-config")
+	os.Setenv("HOME", tmpDir)
+	os.Setenv("XDG_CONFIG_HOME", xdgConfigDir)
+	
+	// Create the OAuth credentials file in XDG_CONFIG_HOME
+	configDir := filepath.Join(xdgConfigDir, "gemini")
+	err := os.MkdirAll(configDir, 0700)
+	require.NoError(t, err)
+	
+	oauthFile := filepath.Join(configDir, "oauth_creds.json")
+	oauthData := `{
+		"access_token": "xdg-oauth-token",
+		"refresh_token": "xdg-refresh-token",
+		"token_type": "Bearer"
+	}`
+	err = os.WriteFile(oauthFile, []byte(oauthData), 0600)
+	require.NoError(t, err)
+	
+	// Restore original environment variables after test
+	defer func() {
+		if originalToken != "" {
+			os.Setenv("GEMINI_TOKEN", originalToken)
+		}
+		if originalHome != "" {
+			os.Setenv("HOME", originalHome)
+		}
+		if originalXDG != "" {
+			os.Setenv("XDG_CONFIG_HOME", originalXDG)
+		}
+	}()
+	
+	token, err := LoadGeminiToken()
+	assert.NoError(t, err)
+	assert.Equal(t, "xdg-oauth-token", token)
+}
+
+func TestLoadGeminiToken_FallbackLocation(t *testing.T) {
+	// Save original environment variables
+	originalToken := os.Getenv("GEMINI_TOKEN")
+	originalHome := os.Getenv("HOME")
+	originalXDG := os.Getenv("XDG_CONFIG_HOME")
+	
+	// Clean up environment variables
+	os.Unsetenv("GEMINI_TOKEN")
+	
+	// Create temporary directory structure
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	os.Unsetenv("XDG_CONFIG_HOME")
+	
+	// Create the OAuth credentials file in fallback location
+	configDir := filepath.Join(tmpDir, ".gemini")
+	err := os.MkdirAll(configDir, 0700)
+	require.NoError(t, err)
+	
+	oauthFile := filepath.Join(configDir, "oauth_creds.json")
+	oauthData := `{
+		"access_token": "fallback-oauth-token",
+		"refresh_token": "fallback-refresh-token"
+	}`
+	err = os.WriteFile(oauthFile, []byte(oauthData), 0600)
+	require.NoError(t, err)
+	
+	// Restore original environment variables after test
+	defer func() {
+		if originalToken != "" {
+			os.Setenv("GEMINI_TOKEN", originalToken)
+		}
+		if originalHome != "" {
+			os.Setenv("HOME", originalHome)
+		}
+		if originalXDG != "" {
+			os.Setenv("XDG_CONFIG_HOME", originalXDG)
+		}
+	}()
+	
+	token, err := LoadGeminiToken()
+	assert.NoError(t, err)
+	assert.Equal(t, "fallback-oauth-token", token)
+}
+
+func TestHasGeminiCredentials(t *testing.T) {
+	t.Run("with API key", func(t *testing.T) {
+		os.Setenv("GEMINI_API_KEY", "test-api-key")
+		defer os.Unsetenv("GEMINI_API_KEY")
+		
+		assert.True(t, hasGeminiCredentials())
+	})
+	
+	t.Run("with OAuth token", func(t *testing.T) {
+		// Save original environment variables
+		originalAPIKey := os.Getenv("GEMINI_API_KEY")
+		originalToken := os.Getenv("GEMINI_TOKEN")
+		originalHome := os.Getenv("HOME")
+		
+		// Clean up environment variables
+		os.Unsetenv("GEMINI_API_KEY")
+		
+		// Set up OAuth token
+		os.Setenv("GEMINI_TOKEN", "test-oauth-token")
+		
+		// Restore original environment variables after test
+		defer func() {
+			if originalAPIKey != "" {
+				os.Setenv("GEMINI_API_KEY", originalAPIKey)
+			}
+			if originalToken != "" {
+				os.Setenv("GEMINI_TOKEN", originalToken)
+			}
+			if originalHome != "" {
+				os.Setenv("HOME", originalHome)
+			}
+		}()
+		
+		assert.True(t, hasGeminiCredentials())
+	})
+	
+	t.Run("without credentials", func(t *testing.T) {
+		// Save original environment variables
+		originalAPIKey := os.Getenv("GEMINI_API_KEY")
+		originalToken := os.Getenv("GEMINI_TOKEN")
+		originalHome := os.Getenv("HOME")
+		
+		// Clean up environment variables
+		os.Unsetenv("GEMINI_API_KEY")
+		os.Unsetenv("GEMINI_TOKEN")
+		
+		// Set temporary HOME to avoid finding real tokens
+		tmpDir := t.TempDir()
+		os.Setenv("HOME", tmpDir)
+		
+		// Restore original environment variables after test
+		defer func() {
+			if originalAPIKey != "" {
+				os.Setenv("GEMINI_API_KEY", originalAPIKey)
+			}
+			if originalToken != "" {
+				os.Setenv("GEMINI_TOKEN", originalToken)
+			}
+			if originalHome != "" {
+				os.Setenv("HOME", originalHome)
+			}
+		}()
+		
+		assert.False(t, hasGeminiCredentials())
+	})
+}
+
 func TestUpdateAgentModel(t *testing.T) {
 	cleanup := setupTestConfig()
 	defer cleanup()

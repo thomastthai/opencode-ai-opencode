@@ -264,6 +264,12 @@ func setProviderDefaults() {
 	if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
 		viper.SetDefault("providers.gemini.apiKey", apiKey)
 	}
+	if apiKey, err := LoadGeminiToken(); err == nil && apiKey != "" {
+		viper.SetDefault("providers.gemini.apiKey", apiKey)
+		if viper.GetString("providers.gemini.apiKey") == "" {
+			viper.Set("providers.gemini.apiKey", apiKey)
+		}
+	}
 	if apiKey := os.Getenv("GROQ_API_KEY"); apiKey != "" {
 		viper.SetDefault("providers.groq.apiKey", apiKey)
 	}
@@ -428,6 +434,17 @@ func hasVertexAICredentials() bool {
 func hasCopilotCredentials() bool {
 	// Check for explicit Copilot parameters
 	if token, _ := LoadGitHubToken(); token != "" {
+		return true
+	}
+	return false
+}
+
+func hasGeminiCredentials() bool {
+	// Check for API key or OAuth token
+	if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
+		return true
+	}
+	if token, _ := LoadGeminiToken(); token != "" {
 		return true
 	}
 	return false
@@ -648,7 +665,13 @@ func getProviderAPIKey(provider models.ModelProvider) string {
 	case models.ProviderOpenAI:
 		return os.Getenv("OPENAI_API_KEY")
 	case models.ProviderGemini:
-		return os.Getenv("GEMINI_API_KEY")
+		if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
+			return apiKey
+		}
+		if token, err := LoadGeminiToken(); err == nil && token != "" {
+			return token
+		}
+		return ""
 	case models.ProviderGROQ:
 		return os.Getenv("GROQ_API_KEY")
 	case models.ProviderAzure:
@@ -750,7 +773,7 @@ func setDefaultModelForAgent(agent AgentName) bool {
 		return true
 	}
 
-	if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
+	if hasGeminiCredentials() {
 		var model models.ModelID
 		maxTokens := int64(5000)
 
@@ -982,6 +1005,65 @@ func LoadGitHubToken() (string, error) {
 	}
 
 	return "", fmt.Errorf("GitHub token not found in standard locations")
+}
+
+// LoadGeminiToken tries to load Gemini OAuth2 token from XDG-compliant locations
+func LoadGeminiToken() (string, error) {
+	// First check environment variable
+	if token := os.Getenv("GEMINI_TOKEN"); token != "" {
+		return token, nil
+	}
+
+	// Get token file paths following XDG Base Directory Specification
+	paths, err := getGeminiTokenFilePaths()
+	if err != nil {
+		return "", err
+	}
+
+	// Try each path in order
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+
+		var tokenData map[string]interface{}
+		if err := json.Unmarshal(data, &tokenData); err != nil {
+			continue
+		}
+
+		// Extract access token from OAuth2 token structure
+		if accessToken, ok := tokenData["access_token"].(string); ok && accessToken != "" {
+			return accessToken, nil
+		}
+	}
+
+	return "", fmt.Errorf("Gemini token not found in standard locations")
+}
+
+// getGeminiTokenFilePaths returns the ordered list of possible Gemini token file paths per XDG + fallback
+func getGeminiTokenFilePaths() ([]string, error) {
+	var paths []string
+
+	// Get home directory
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		return nil, fmt.Errorf("HOME environment variable not set")
+	}
+
+	// XDG_CONFIG_HOME/gemini/oauth_creds.json
+	configDir := os.Getenv("XDG_CONFIG_HOME")
+	if configDir != "" {
+		paths = append(paths, filepath.Join(configDir, "gemini", "oauth_creds.json"))
+	} else {
+		// ~/.config/gemini/oauth_creds.json (fallback when XDG_CONFIG_HOME is not set)
+		paths = append(paths, filepath.Join(homeDir, ".config", "gemini", "oauth_creds.json"))
+	}
+
+	// ~/.gemini/oauth_creds.json (additional fallback for backwards compatibility)
+	paths = append(paths, filepath.Join(homeDir, ".gemini", "oauth_creds.json"))
+
+	return paths, nil
 }
 
 // Init is a simplified configuration initializer for tests.

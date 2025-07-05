@@ -102,6 +102,7 @@ You can configure OpenCode using environment variables:
 | `ANTHROPIC_API_KEY`        | For Claude models                                                                |
 | `OPENAI_API_KEY`           | For OpenAI models                                                                |
 | `GEMINI_API_KEY`           | For Google Gemini models                                                         |
+| `GEMINI_TOKEN`             | For Gemini OAuth2 authentication (see [Gemini OAuth](#gemini-oauth-authentication)) |
 | `GITHUB_TOKEN`             | For Github Copilot models (see [Using Github Copilot](#using-github-copilot))    |
 | `VERTEXAI_PROJECT`         | For Google Cloud VertexAI (Gemini)                                               |
 | `VERTEXAI_LOCATION`        | For Google Cloud VertexAI (Gemini)                                               |
@@ -690,6 +691,48 @@ the tool with your github account. This should create a github token at one of t
 - $XDG_CONFIG_HOME/github-copilot/[hosts,apps].json
 
 If using an explicit github token, you may either set the $GITHUB_TOKEN environment variable or add it to the opencode.json config file at `providers.copilot.apiKey`.
+
+## Gemini OAuth Authentication
+
+OpenCode supports Google OAuth2 authentication for Gemini models, providing an alternative to API keys.
+
+### Authentication Methods
+
+OpenCode will automatically detect Gemini credentials in this order:
+
+1. **API Key**: `GEMINI_API_KEY` environment variable
+2. **OAuth Token**: `GEMINI_TOKEN` environment variable
+3. **OAuth Files**: Automatically loaded from XDG-compliant locations
+
+### OAuth Token File Locations
+
+OpenCode looks for OAuth token files in the following locations (in order):
+
+- `$XDG_CONFIG_HOME/gemini/oauth_creds.json` (if `XDG_CONFIG_HOME` is set)
+- `~/.config/gemini/oauth_creds.json` (standard XDG location)
+- `~/.gemini/oauth_creds.json` (fallback location)
+
+### OAuth Token File Format
+
+The OAuth credentials file should be a JSON file with this structure:
+
+```json
+{
+  "access_token": "your-oauth-access-token",
+  "refresh_token": "your-refresh-token",
+  "token_type": "Bearer",
+  "expiry": "2024-12-31T23:59:59Z"
+}
+```
+
+### Benefits
+
+- **No API Key Management**: Use your Google account instead of managing API keys
+- **XDG Compliant**: Follows modern Linux desktop standards for configuration files
+- **Automatic Detection**: Works seamlessly once tokens are in place
+- **Backwards Compatible**: Existing API key setups continue to work
+
+For detailed information about generating OAuth tokens, see [GEMINI_OAUTH.md](GEMINI_OAUTH.md).
 
 ## Using a self-hosted model provider
 
