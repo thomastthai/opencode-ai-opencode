@@ -52,8 +52,14 @@ OpenCode is a terminal-based AI assistant built with Go, featuring:
 
 ## Development Notes
 
-- The codebase currently has build errors in `internal/llm/agent/agent-tool.go` - undefined variables need fixing
 - Built-in commands are registered via `RegisterBuiltIn()` in init functions
 - Custom commands are loaded from `.opencode/commands/` directories as markdown files
 - LSP integration provides diagnostics but full protocol support is implemented
 - MCP (Model Context Protocol) support for external tool integration
+- OAuth2 authentication includes comprehensive test coverage:
+  - Token lifecycle management (save, load, refresh, clear)
+  - XDG Base Directory Specification compliance
+  - Security features (file permissions, concurrent access)
+  - TUI dialog integration with visual feedback
+  - Multi-source configuration priority handling
+  - Error scenarios and edge case handling

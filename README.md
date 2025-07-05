@@ -25,6 +25,7 @@ OpenCode is a Go-based CLI application that brings AI assistance to your termina
 - **Interactive TUI**: Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) for a smooth terminal experience
 - **Enhanced Command System**: Powerful slash command interface with search, categorization, and visual grouping
 - **Multiple AI Providers**: Support for OpenAI, Anthropic Claude, Google Gemini, AWS Bedrock, Groq, Azure OpenAI, and OpenRouter
+- **OAuth2 Authentication**: Seamless OAuth2 integration with visual TUI dialogs for secure authentication
 - **Session Management**: Save and manage multiple conversation sessions
 - **Tool Integration**: AI can execute commands, search files, and modify code
 - **Vim-like Editor**: Integrated editor with text input capabilities
@@ -103,6 +104,8 @@ You can configure OpenCode using environment variables:
 | `OPENAI_API_KEY`           | For OpenAI models                                                                |
 | `GEMINI_API_KEY`           | For Google Gemini models                                                         |
 | `GEMINI_TOKEN`             | For Gemini OAuth2 authentication (see [Gemini OAuth](#gemini-oauth-authentication)) |
+| `GEMINI_OAUTH_CLIENT_ID`   | OAuth2 Client ID for Gemini authentication                                      |
+| `GEMINI_OAUTH_CLIENT_SECRET` | OAuth2 Client Secret for Gemini authentication                                |
 | `GITHUB_TOKEN`             | For Github Copilot models (see [Using Github Copilot](#using-github-copilot))    |
 | `VERTEXAI_PROJECT`         | For Google Cloud VertexAI (Gemini)                                               |
 | `VERTEXAI_LOCATION`        | For Google Cloud VertexAI (Gemini)                                               |
@@ -147,6 +150,15 @@ This is useful if you want to use a different shell than your default system she
     },
     "anthropic": {
       "apiKey": "your-api-key",
+      "disabled": false
+    },
+    "gemini": {
+      "apiKey": "your-api-key",
+      "authMethod": "auto",
+      "oauth2": {
+        "clientId": "your-client-id.apps.googleusercontent.com",
+        "clientSecret": "your-client-secret"
+      },
       "disabled": false
     },
     "copilot": {
@@ -559,6 +571,45 @@ go build -o opencode
 ./opencode
 ```
 
+### Testing
+
+OpenCode includes comprehensive test coverage for all core functionality:
+
+```bash
+# Run all tests
+go test ./...
+
+# Run tests with verbose output
+go test -v ./...
+
+# Run specific test packages
+go test ./internal/config
+go test ./internal/commands
+go test ./internal/llm/oauth
+
+# Run tests by pattern
+go test -run TestOAuth2 ./...
+```
+
+#### Test Coverage Areas
+
+- **OAuth2 Authentication**: Complete test suite for Google OAuth2 integration
+  - Token management (save, load, refresh, clear)
+  - XDG Base Directory Specification compliance
+  - File permissions and security
+  - Multi-location token handling
+  - Environment variable vs config file priority
+  - TUI dialog integration and user experience
+  - Error handling and edge cases
+  - Concurrent access protection
+
+- **Command System**: Built-in and custom command functionality
+- **Configuration Management**: Multi-source config loading and validation
+- **TUI Components**: Interactive dialog and UI element testing
+- **Provider Integration**: LLM provider authentication and communication
+
+The test suite ensures reliability, security, and proper user experience across all authentication methods and configurations.
+
 ### Adding Built-in Commands
 
 To add a new built-in command:
@@ -694,15 +745,117 @@ If using an explicit github token, you may either set the $GITHUB_TOKEN environm
 
 ## Gemini OAuth Authentication
 
-OpenCode supports Google OAuth2 authentication for Gemini models, providing an alternative to API keys.
+OpenCode supports Google OAuth2 authentication for Gemini models, providing an alternative to API keys. OAuth2 offers several advantages:
 
-### Authentication Methods
+- **No API Key Management**: Use your Google account instead of managing API keys
+- **Enhanced Security**: OAuth2 tokens can be revoked and have expiration times
+- **Automatic Refresh**: Tokens are automatically refreshed when they expire
+- **XDG Compliant**: Follows modern Linux desktop standards for configuration files
+
+### 🚀 Quick Start
+
+1. **Set up OAuth2 credentials** (see [Getting OAuth2 Credentials](#getting-oauth2-credentials) below)
+2. **Configure OpenCode** with your credentials
+3. **Run the login command**: `/login gemini`
+4. **Authenticate in your browser** when it opens
+5. **Start using Gemini models!**
+
+### Configuration
+
+Before using OAuth2 authentication, you need to configure your OAuth2 credentials. OpenCode provides two methods:
+
+#### Method 1: Environment Variables (Recommended for Development)
+```bash
+export GEMINI_OAUTH_CLIENT_ID="your-client-id.apps.googleusercontent.com"
+export GEMINI_OAUTH_CLIENT_SECRET="your-client-secret"
+```
+
+#### Method 2: Configuration File (Recommended for Production)
+Add to your `.opencode.json` file:
+```json
+{
+  "providers": {
+    "gemini": {
+      "authMethod": "oauth2",
+      "oauth2": {
+        "clientId": "your-client-id.apps.googleusercontent.com",
+        "clientSecret": "your-client-secret"
+      }
+    }
+  }
+}
+```
+
+### Getting OAuth2 Credentials
+
+Follow these steps to obtain your OAuth2 credentials from Google:
+
+1. **Go to [Google Cloud Console](https://console.cloud.google.com)**
+2. **Create or Select Project**:
+   - Click "Select a project" at the top
+   - Either create a new project or select an existing one
+3. **Enable the API**:
+   - Go to "APIs & Services" → "Library"
+   - Search for "Generative Language API"
+   - Click on it and press "Enable"
+4. **Create OAuth2 Credentials**:
+   - Go to "APIs & Services" → "Credentials"
+   - Click "Create Credentials" → "OAuth 2.0 Client IDs"
+   - If prompted, configure the OAuth consent screen first
+   - Choose "Desktop application" as the application type
+   - Give it a name (e.g., "OpenCode")
+   - Click "Create"
+5. **Copy Your Credentials**:
+   - Copy the "Client ID" and "Client Secret"
+   - Use these in your OpenCode configuration
+
+### Authentication Commands
+
+OpenCode provides built-in commands for managing OAuth2 authentication:
+
+| Command | Description |
+|---------|-------------|
+| `/login gemini` | Start OAuth2 authentication flow |
+| `/logout gemini` | Clear stored OAuth2 tokens |
+| `/auth status` | Show current authentication status |
+| `/auth method` | Display authentication method configuration |
+
+### Authentication Flow
+
+When you run `/login gemini` in the Terminal UI:
+
+1. **TUI Dialog**: OpenCode displays an OAuth2 authentication dialog with a spinner
+2. **Credential Validation**: Checks if OAuth2 credentials are configured
+3. **Local Server**: Starts a temporary HTTP server on a random port
+4. **Browser Launch**: Your default browser opens to Google's OAuth2 page automatically
+5. **Visual Feedback**: The dialog shows authentication progress and browser instructions
+6. **User Authentication**: You log in with your Google account and grant permissions
+7. **Token Storage**: OAuth2 tokens are securely saved to XDG-compliant locations
+8. **Success Confirmation**: Dialog shows success message when authentication completes
+9. **Ready to Use**: You can now use Gemini models with OAuth2 authentication
+
+The TUI provides a seamless visual experience with real-time feedback during the authentication process.
+
+### Authentication Method Selection
+
+You can configure which authentication method OpenCode should prefer:
+
+| Method | Behavior | Configuration |
+|--------|----------|---------------|
+| `api_key` | Use only API key authentication | `"authMethod": "api_key"` |
+| `oauth2` | Use only OAuth2 authentication | `"authMethod": "oauth2"` |
+| `auto` | Try OAuth2 first, fallback to API key | `"authMethod": "auto"` (default) |
+
+### Authentication Priority Order
 
 OpenCode will automatically detect Gemini credentials in this order:
 
 1. **API Key**: `GEMINI_API_KEY` environment variable
-2. **OAuth Token**: `GEMINI_TOKEN` environment variable
+2. **OAuth Token**: `GEMINI_TOKEN` environment variable  
 3. **OAuth Files**: Automatically loaded from XDG-compliant locations
+4. **Provider Config**: API key from configuration file
+
+> **Note**: The priority order can be overridden by setting a specific `authMethod` in your configuration.
 
 ### OAuth Token File Locations
 
@@ -733,6 +886,24 @@ The OAuth credentials file should be a JSON file with this structure:
 - **Backwards Compatible**: Existing API key setups continue to work
 
 For detailed information about generating OAuth tokens, see [GEMINI_OAUTH.md](GEMINI_OAUTH.md).
+
+### Troubleshooting OAuth2
+
+If you encounter issues with OAuth2 authentication:
+
+1. **Run `/auth status`** to check your current authentication state
+2. **Verify credentials** - ensure your Client ID and Client Secret are correct
+3. **Check API enablement** - make sure the Generative Language API is enabled in Google Cloud Console
+4. **Reset authentication** - try `/logout gemini` followed by `/login gemini`
+5. **Dialog issues** - if the OAuth2 dialog shows errors, use the retry option or check the console for detailed error messages
+6. **Browser problems** - if the browser doesn't open automatically, check the dialog for the authentication URL to copy manually
+
+**TUI Features:**
+- **Visual feedback**: The OAuth2 dialog shows real-time progress and status
+- **Error handling**: Clear error messages with retry functionality in the dialog
+- **Instructions**: The dialog provides helpful guidance during authentication
+
+**Need help?** Run `/login gemini` without configuration - OpenCode will display detailed setup instructions in the OAuth2 dialog.
 
 ## Using a self-hosted model provider
 

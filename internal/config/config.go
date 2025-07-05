@@ -2,6 +2,7 @@
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/opencode-ai/opencode/internal/llm/models"
+	"github.com/opencode-ai/opencode/internal/llm/oauth"
 	"github.com/opencode-ai/opencode/internal/logging"
 	"github.com/spf13/viper"
 )
@@ -50,10 +52,27 @@ type Agent struct {
 	ReasoningEffort string         `json:"reasoningEffort"` // For openai models low,medium,heigh
 }
 
+// AuthMethod defines the authentication method for a provider
+type AuthMethod string
+
+const (
+	AuthMethodAPIKey AuthMethod = "api_key"
+	AuthMethodOAuth2 AuthMethod = "oauth2"
+	AuthMethodAuto   AuthMethod = "auto" // Try OAuth2 first, fallback to API key
+)
+
+// OAuth2Config defines OAuth2 configuration for a provider
+type OAuth2Config struct {
+	ClientID     string `json:"clientId"`
+	ClientSecret string `json:"clientSecret"`
+}
+
 // Provider defines configuration for an LLM provider.
 type Provider struct {
-	APIKey   string `json:"apiKey"`
-	Disabled bool   `json:"disabled"`
+	APIKey     string       `json:"apiKey"`
+	Disabled   bool         `json:"disabled"`
+	AuthMethod AuthMethod   `json:"authMethod,omitempty"` // Preferred authentication method
+	OAuth2     OAuth2Config `json:"oauth2,omitempty"`     // OAuth2 configuration
 }
 
 // Data defines storage configuration.
@@ -450,6 +469,51 @@ func hasGeminiCredentials() bool {
 	return false
 }
 
+// getGeminiAPIKey returns the appropriate Gemini API key or OAuth token based on auth method preference
+func getGeminiAPIKey() string {
+	authMethod := GetGeminiAuthMethod()
+	
+	switch authMethod {
+	case AuthMethodAPIKey:
+		// Only try API key
+		if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
+			return apiKey
+		}
+		// Check config file for API key
+		if cfg != nil {
+			if provider, exists := cfg.Providers[models.ProviderGemini]; exists && provider.APIKey != "" {
+				return provider.APIKey
+			}
+		}
+		return ""
+		
+	case AuthMethodOAuth2:
+		// Only try OAuth2 token
+		if token, err := LoadGeminiToken(); err == nil && token != "" {
+			return token
+		}
+		return ""
+		
+	case AuthMethodAuto:
+		fallthrough
+	default:
+		// Auto mode: try OAuth2 first, then API key
+		if token, err := LoadGeminiToken(); err == nil && token != "" {
+			return token
+		}
+		if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
+			return apiKey
+		}
+		// Check config file for API key as final fallback
+		if cfg != nil {
+			if provider, exists := cfg.Providers[models.ProviderGemini]; exists && provider.APIKey != "" {
+				return provider.APIKey
+			}
+		}
+		return ""
+	}
+}
+
 // readConfig handles the result of reading a configuration file.
 func readConfig(err error) error {
 	if err == nil {
@@ -665,13 +729,7 @@ func getProviderAPIKey(provider models.ModelProvider) string {
 	case models.ProviderOpenAI:
 		return os.Getenv("OPENAI_API_KEY")
 	case models.ProviderGemini:
-		if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
-			return apiKey
-		}
-		if token, err := LoadGeminiToken(); err == nil && token != "" {
-			return token
-		}
-		return ""
+		return getGeminiAPIKey()
 	case models.ProviderGROQ:
 		return os.Getenv("GROQ_API_KEY")
 	case models.ProviderAzure:
@@ -891,8 +949,18 @@ func Get() *Config {
 	return cfg
 }
 
+// GetConfig returns the current configuration (alias for Get).
+func GetConfig() *Config {
+	return cfg
+}
+
 // Set sets the global configuration instance. This is intended for testing purposes only.
 func Set(c *Config) {
+	cfg = c
+}
+
+// SetConfig sets the global configuration instance (alias for Set).
+func SetConfig(c *Config) {
 	cfg = c
 }
 
@@ -1064,6 +1132,123 @@ func getGeminiTokenFilePaths() ([]string, error) {
 	paths = append(paths, filepath.Join(homeDir, ".gemini", "oauth_creds.json"))
 
 	return paths, nil
+}
+
+// OAuth2 Service functions
+
+// GetGeminiOAuth2Config returns the OAuth2 configuration for Gemini
+func GetGeminiOAuth2Config() (string, string) {
+	// Default to environment variables
+	clientID := os.Getenv("GEMINI_OAUTH_CLIENT_ID")
+	clientSecret := os.Getenv("GEMINI_OAUTH_CLIENT_SECRET")
+	
+	// Override with config file values if available
+	if cfg != nil {
+		if provider, exists := cfg.Providers[models.ProviderGemini]; exists {
+			if provider.OAuth2.ClientID != "" {
+				clientID = provider.OAuth2.ClientID
+			}
+			if provider.OAuth2.ClientSecret != "" {
+				clientSecret = provider.OAuth2.ClientSecret
+			}
+		}
+	}
+	
+	// Fall back to default values if nothing is configured
+	if clientID == "" {
+		clientID = "your-client-id.apps.googleusercontent.com"
+	}
+	if clientSecret == "" {
+		clientSecret = "your-client-secret"
+	}
+	
+	return clientID, clientSecret
+}
+
+// GetOAuth2Service returns a new OAuth2 service instance with current configuration
+func GetOAuth2Service() *oauth.Service {
+	clientID, clientSecret := GetGeminiOAuth2Config()
+	return oauth.NewServiceWithCredentials(clientID, clientSecret)
+}
+
+// LoginWithGeminiOAuth2 performs OAuth2 login flow for Gemini
+func LoginWithGeminiOAuth2(ctx context.Context) error {
+	service := GetOAuth2Service()
+	token, err := service.Login(ctx)
+	if err != nil {
+		return fmt.Errorf("OAuth2 login failed: %w", err)
+	}
+	
+	slog.Info("Successfully authenticated with Gemini OAuth2", 
+		"expires", token.Expiry.Format("2006-01-02 15:04:05"))
+	return nil
+}
+
+// LogoutGeminiOAuth2 clears stored OAuth2 tokens
+func LogoutGeminiOAuth2() error {
+	service := GetOAuth2Service()
+	if err := service.ClearToken(); err != nil {
+		return fmt.Errorf("failed to clear OAuth2 tokens: %w", err)
+	}
+	
+	slog.Info("Successfully logged out of Gemini OAuth2")
+	return nil
+}
+
+// GetGeminiAuthStatus returns information about current Gemini authentication
+func GetGeminiAuthStatus() (string, bool) {
+	// Check API key
+	if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
+		return "API Key (environment variable)", true
+	}
+	
+	// Check provider config
+	if cfg != nil {
+		if provider, exists := cfg.Providers[models.ProviderGemini]; exists && provider.APIKey != "" {
+			return "API Key (configuration file)", true
+		}
+	}
+	
+	// Check OAuth2 token
+	if oauth.HasGeminiOAuthToken() {
+		service := GetOAuth2Service()
+		if token, _, err := service.LoadToken(); err == nil {
+			if token.Valid() {
+				return fmt.Sprintf("OAuth2 (expires %s)", token.Expiry.Format("2006-01-02 15:04:05")), true
+			} else {
+				return "OAuth2 (expired)", false
+			}
+		}
+	}
+	
+	return "No authentication configured", false
+}
+
+// GetGeminiAuthMethod returns the preferred authentication method for Gemini
+func GetGeminiAuthMethod() AuthMethod {
+	if cfg != nil {
+		if provider, exists := cfg.Providers[models.ProviderGemini]; exists && provider.AuthMethod != "" {
+			return provider.AuthMethod
+		}
+	}
+	return AuthMethodAuto // Default to auto detection
+}
+
+// SetGeminiAuthMethod sets the preferred authentication method for Gemini
+func SetGeminiAuthMethod(method AuthMethod) error {
+	if cfg == nil {
+		return fmt.Errorf("configuration not loaded")
+	}
+	
+	if cfg.Providers == nil {
+		cfg.Providers = make(map[models.ModelProvider]Provider)
+	}
+	
+	provider := cfg.Providers[models.ProviderGemini]
+	provider.AuthMethod = method
+	cfg.Providers[models.ProviderGemini] = provider
+	
+	return nil
 }
 
 // Init is a simplified configuration initializer for tests.

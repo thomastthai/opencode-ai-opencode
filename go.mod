@@ -33,7 +33,10 @@ require (
 	github.com/stretchr/testify v1.10.0
 )
 
-require github.com/stretchr/objx v0.5.2 // indirect
+require (
+	github.com/stretchr/objx v0.5.2 // indirect
+	golang.org/x/oauth2 v0.30.0 // indirect
+)
 
 require (
 	cloud.google.com/go v0.116.0 // indirect

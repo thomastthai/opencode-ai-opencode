@@ -134,6 +134,9 @@ type appModel struct {
 	showMultiArgumentsDialog bool
 	multiArgumentsDialog     dialog.MultiArgumentsDialogCmp
 
+	showOAuth2Dialog bool
+	oauth2Dialog     dialog.OAuth2DialogCmp
+
 	isCompacting      bool
 	compactingMessage string
 }
@@ -160,6 +163,8 @@ func (a appModel) Init() tea.Cmd {
 	cmd = a.filepicker.Init()
 	cmds = append(cmds, cmd)
 	cmd = a.themeDialog.Init()
+	cmds = append(cmds, cmd)
+	cmd = a.oauth2Dialog.Init()
 	cmds = append(cmds, cmd)
 
 	// Check if we should show the init dialog
@@ -255,6 +260,26 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.CloseCommandDialogMsg:
 		a.showCommandDialog = false
 		return a, nil
+
+	case dialog.OAuth2DialogMsg:
+		if a.showOAuth2Dialog {
+			oauth2, cmd := a.oauth2Dialog.Update(msg)
+			a.oauth2Dialog = oauth2.(dialog.OAuth2DialogCmp)
+			cmds = append(cmds, cmd)
+		}
+		return a, tea.Batch(cmds...)
+
+	case dialog.ShowOAuth2DialogMsg:
+		a.showOAuth2Dialog = true
+		cmd = a.oauth2Dialog.StartOAuth2(msg.Provider)
+		cmds = append(cmds, cmd)
+		return a, tea.Batch(cmds...)
+
+	case string:
+		if msg == "close_oauth2_dialog" {
+			a.showOAuth2Dialog = false
+			return a, nil
+		}
 
 	// Handle key messages for global shortcuts
 	case tea.KeyMsg:
@@ -353,6 +378,15 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if a.showOAuth2Dialog {
+		d, oauth2Cmd := a.oauth2Dialog.Update(msg)
+		a.oauth2Dialog = d.(dialog.OAuth2DialogCmp)
+		cmds = append(cmds, oauth2Cmd)
+		if _, ok := msg.(tea.KeyMsg); ok {
+			return a, tea.Batch(cmds...)
+		}
+	}
+
 	// If no dialog is active, pass the message to the current page
 	a.pages[a.currentPage], cmd = a.pages[a.currentPage].Update(msg)
 	cmds = append(cmds, cmd)
@@ -429,6 +463,11 @@ If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (
 		case "list", "ls", "commands":
 			// This could show command list in a message
 			return nil
+		case "login gemini":
+			// Handle Gemini OAuth2 login
+			return util.CmdHandler(dialog.ShowOAuth2DialogMsg{
+				Provider: dialog.OAuth2ProviderGemini,
+			})
 		default:
 			// For other built-in commands, try to execute via registry
 			return nil
@@ -703,6 +742,21 @@ func (a appModel) View() string {
 		)
 	}
 
+	if a.showOAuth2Dialog {
+		overlay := a.oauth2Dialog.View()
+		row := lipgloss.Height(appView) / 2
+		row -= lipgloss.Height(overlay) / 2
+		col := lipgloss.Width(appView) / 2
+		col -= lipgloss.Width(overlay) / 2
+		appView = layout.PlaceOverlay(
+			col,
+			row,
+			overlay,
+			appView,
+			true,
+		)
+	}
+
 	return appView
 }
 
@@ -720,6 +774,7 @@ func New(app *app.App) tea.Model {
 		permissions:   dialog.NewPermissionDialogCmp(),
 		initDialog:    dialog.NewInitDialogCmp(),
 		themeDialog:   dialog.NewThemeDialogCmp(),
+		oauth2Dialog:  dialog.NewOAuth2DialogCmp(),
 		app:           app,
 		commands:      []command.Command{},
 		pages: map[page.PageID]tea.Model{
