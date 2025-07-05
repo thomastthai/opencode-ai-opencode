@@ -53,6 +53,7 @@ func TestLoad_BasicConfiguration(t *testing.T) {
 	assert.Equal(t, defaultDataDirectory, config.Data.Directory)
 	assert.False(t, config.Debug)
 	assert.Equal(t, "opencode", config.TUI.Theme)
+	assert.True(t, config.TUI.ShowModelInfo) // Default should be true
 	assert.True(t, config.AutoCompact)
 	
 	// Verify default context paths are set
@@ -111,7 +112,8 @@ func TestLoad_WithLocalConfig(t *testing.T) {
 	localConfigContent := `{
 		"debug": true,
 		"tui": {
-			"theme": "custom-theme"
+			"theme": "custom-theme",
+			"showModelInfo": false
 		},
 		"contextPaths": ["custom.md"]
 	}`
@@ -126,6 +128,7 @@ func TestLoad_WithLocalConfig(t *testing.T) {
 	assert.NotNil(t, config)
 	assert.True(t, config.Debug) // Should be overridden by local config
 	assert.Equal(t, "custom-theme", config.TUI.Theme)
+	assert.False(t, config.TUI.ShowModelInfo) // Should be overridden by local config
 	assert.Contains(t, config.ContextPaths, "custom.md")
 }
 

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -88,9 +89,65 @@ type LSPConfig struct {
 	Options  any      `json:"options"`
 }
 
+// MessageLayout defines the layout style for chat messages
+type MessageLayout string
+
+const (
+	MessageLayoutClassic   MessageLayout = "classic"   // Current left-aligned layout
+	MessageLayoutMessaging MessageLayout = "messaging" // Modern messaging app layout
+)
+
+// BorderSides defines which sides of the border to show
+type BorderSides struct {
+	Top    bool `json:"top,omitempty"`    // Show top border
+	Right  bool `json:"right,omitempty"`  // Show right border
+	Bottom bool `json:"bottom,omitempty"` // Show bottom border
+	Left   bool `json:"left,omitempty"`   // Show left border
+}
+
+// BorderConfig defines border appearance options
+type BorderConfig struct {
+	Character       string `json:"character,omitempty"`       // Border character (e.g., "│", "┃", "|")
+	HorizontalChar  string `json:"horizontalChar,omitempty"`  // Horizontal border character (e.g., "─", "━", "-")
+	TopLeftChar     string `json:"topLeftChar,omitempty"`     // Top-left corner character (e.g., "┌", "┏", "+")
+	TopRightChar    string `json:"topRightChar,omitempty"`    // Top-right corner character (e.g., "┐", "┓", "+")
+	BottomLeftChar  string `json:"bottomLeftChar,omitempty"`  // Bottom-left corner character (e.g., "└", "┗", "+")
+	BottomRightChar string `json:"bottomRightChar,omitempty"` // Bottom-right corner character (e.g., "┘", "┛", "+")
+	ForegroundColor string `json:"foregroundColor,omitempty"` // Hex color for border (e.g., "#888888")
+	BackgroundColor string `json:"backgroundColor,omitempty"` // Hex color for border background (e.g., "#000000")
+	Sides           BorderSides `json:"sides,omitempty"`      // Which sides to show
+}
+
+// MessageLayoutConfig defines styling options for the messaging layout
+type MessageLayoutConfig struct {
+	UserMessageWidth      float64 `json:"userMessageWidth,omitempty"`      // Width as percentage (0.0-1.0)
+	AssistantMessageWidth float64 `json:"assistantMessageWidth,omitempty"` // Width as percentage (0.0-1.0)
+	UserRightMargin       int     `json:"userRightMargin,omitempty"`       // Right margin for user messages
+	AssistantLeftMargin   int     `json:"assistantLeftMargin,omitempty"`   // Left margin for assistant messages
+	UseBackgrounds        bool    `json:"useBackgrounds,omitempty"`        // Whether to use background colors
+	UseRoundedBorders     bool    `json:"useRoundedBorders,omitempty"`     // Whether to use rounded borders for user messages
+	
+	// Hex color overrides for user messages (optional)
+	UserTextColor       string `json:"userTextColor,omitempty"`       // Hex color for user text (e.g., "#ffffff")
+	UserBackgroundColor string `json:"userBackgroundColor,omitempty"` // Hex color for user message background (e.g., "#007acc")
+	
+	// Hex color overrides for assistant messages (optional)
+	AssistantTextColor       string `json:"assistantTextColor,omitempty"`       // Hex color for assistant text (e.g., "#ffffff")
+	AssistantBackgroundColor string `json:"assistantBackgroundColor,omitempty"` // Hex color for assistant message background (e.g., "#444444")
+	
+	// Border configuration for user messages
+	UserBorder BorderConfig `json:"userBorder,omitempty"` // Border config for user messages
+	
+	// Border configuration for assistant messages
+	AssistantBorder BorderConfig `json:"assistantBorder,omitempty"` // Border config for assistant messages
+}
+
 // TUIConfig defines the configuration for the Terminal User Interface.
 type TUIConfig struct {
-	Theme string `json:"theme,omitempty"`
+	Theme               string              `json:"theme,omitempty"`
+	ShowModelInfo       bool                `json:"showModelInfo,omitempty"`
+	MessageLayout       MessageLayout       `json:"messageLayout,omitempty"`
+	MessageLayoutConfig MessageLayoutConfig `json:"messageLayoutConfig,omitempty"`
 }
 
 // ShellConfig defines the configuration for the shell used by the bash tool.
@@ -250,6 +307,32 @@ func setDefaults(debug bool) {
 	viper.SetDefault("data.directory", defaultDataDirectory)
 	viper.SetDefault("contextPaths", defaultContextPaths)
 	viper.SetDefault("tui.theme", "opencode")
+	viper.SetDefault("tui.showModelInfo", true)
+	viper.SetDefault("tui.messageLayout", "classic")
+	viper.SetDefault("tui.messageLayoutConfig.userMessageWidth", 0.65)
+	viper.SetDefault("tui.messageLayoutConfig.assistantMessageWidth", 0.75)
+	viper.SetDefault("tui.messageLayoutConfig.userRightMargin", 10)
+	viper.SetDefault("tui.messageLayoutConfig.assistantLeftMargin", 2)
+	viper.SetDefault("tui.messageLayoutConfig.useBackgrounds", true)
+	viper.SetDefault("tui.messageLayoutConfig.useRoundedBorders", true)
+	
+	// Set default border configurations
+	viper.SetDefault("tui.messageLayoutConfig.userBorder.character", "│")
+	viper.SetDefault("tui.messageLayoutConfig.userBorder.horizontalChar", "─")
+	viper.SetDefault("tui.messageLayoutConfig.userBorder.topLeftChar", "┌")
+	viper.SetDefault("tui.messageLayoutConfig.userBorder.topRightChar", "┐")
+	viper.SetDefault("tui.messageLayoutConfig.userBorder.bottomLeftChar", "└")
+	viper.SetDefault("tui.messageLayoutConfig.userBorder.bottomRightChar", "┘")
+	viper.SetDefault("tui.messageLayoutConfig.userBorder.sides.right", true)
+	
+	viper.SetDefault("tui.messageLayoutConfig.assistantBorder.character", "│")
+	viper.SetDefault("tui.messageLayoutConfig.assistantBorder.horizontalChar", "─")
+	viper.SetDefault("tui.messageLayoutConfig.assistantBorder.topLeftChar", "┌")
+	viper.SetDefault("tui.messageLayoutConfig.assistantBorder.topRightChar", "┐")
+	viper.SetDefault("tui.messageLayoutConfig.assistantBorder.bottomLeftChar", "└")
+	viper.SetDefault("tui.messageLayoutConfig.assistantBorder.bottomRightChar", "┘")
+	viper.SetDefault("tui.messageLayoutConfig.assistantBorder.sides.left", true)
+	
 	viper.SetDefault("autoCompact", true)
 
 	// Set default shell from environment or fallback to /bin/bash
@@ -718,6 +801,11 @@ func Validate() error {
 		}
 	}
 
+	// Validate message layout configuration
+	if err := validateMessageLayoutConfig(cfg); err != nil {
+		return fmt.Errorf("message layout config validation failed: %w", err)
+	}
+
 	return nil
 }
 
@@ -746,6 +834,74 @@ func getProviderAPIKey(provider models.ModelProvider) string {
 		}
 	}
 	return ""
+}
+
+// isValidHexColor validates if a string is a valid hex color format
+func isValidHexColor(hex string) bool {
+	if hex == "" {
+		return true // Empty string is valid (means no override)
+	}
+	// Match #RRGGBB or #RGB format
+	hexRegex := regexp.MustCompile(`^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$`)
+	return hexRegex.MatchString(hex)
+}
+
+// validateBorderChar validates a single border character
+func validateBorderChar(char *string, charName, borderName string, defaultChar string) {
+	if *char != "" && len([]rune(*char)) != 1 {
+		logging.Warn("invalid border character, should be single character", "border", borderName, "charType", charName, "character", *char)
+		*char = defaultChar
+	}
+}
+
+// validateBorderConfig validates a border configuration
+func validateBorderConfig(border *BorderConfig, name string) {
+	// Validate all border characters (should be single printable characters)
+	validateBorderChar(&border.Character, "vertical", name, "│")
+	validateBorderChar(&border.HorizontalChar, "horizontal", name, "─")
+	validateBorderChar(&border.TopLeftChar, "topLeft", name, "┌")
+	validateBorderChar(&border.TopRightChar, "topRight", name, "┐")
+	validateBorderChar(&border.BottomLeftChar, "bottomLeft", name, "└")
+	validateBorderChar(&border.BottomRightChar, "bottomRight", name, "┘")
+	
+	// Validate hex colors
+	if !isValidHexColor(border.ForegroundColor) {
+		logging.Warn("invalid hex color for border foreground color, ignoring", "border", name, "color", border.ForegroundColor)
+		border.ForegroundColor = ""
+	}
+	if !isValidHexColor(border.BackgroundColor) {
+		logging.Warn("invalid hex color for border background color, ignoring", "border", name, "color", border.BackgroundColor)
+		border.BackgroundColor = ""
+	}
+}
+
+// validateMessageLayoutConfig validates the message layout configuration
+func validateMessageLayoutConfig(cfg *Config) error {
+	layout := &cfg.TUI.MessageLayoutConfig
+	
+	// Validate hex colors
+	if !isValidHexColor(layout.UserTextColor) {
+		logging.Warn("invalid hex color for userTextColor, ignoring", "color", layout.UserTextColor)
+		layout.UserTextColor = ""
+	}
+	if !isValidHexColor(layout.UserBackgroundColor) {
+		logging.Warn("invalid hex color for userBackgroundColor, ignoring", "color", layout.UserBackgroundColor)
+		layout.UserBackgroundColor = ""
+	}
+	if !isValidHexColor(layout.AssistantTextColor) {
+		logging.Warn("invalid hex color for assistantTextColor, ignoring", "color", layout.AssistantTextColor)
+		layout.AssistantTextColor = ""
+	}
+	if !isValidHexColor(layout.AssistantBackgroundColor) {
+		logging.Warn("invalid hex color for assistantBackgroundColor, ignoring", "color", layout.AssistantBackgroundColor)
+		layout.AssistantBackgroundColor = ""
+	}
+	
+	// Validate border configurations
+	validateBorderConfig(&layout.UserBorder, "userBorder")
+	validateBorderConfig(&layout.AssistantBorder, "assistantBorder")
+	
+	return nil
 }
 
 // setDefaultModelForAgent sets a default model for an agent based on available providers
