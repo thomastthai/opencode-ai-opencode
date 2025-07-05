@@ -134,17 +134,6 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		context, contextCmd := p.completionDialog.Update(msg)
 		p.completionDialog = context.(dialog.CompletionDialog)
 		cmds = append(cmds, contextCmd)
-	} else {
-		u, cmd := p.layout.Update(msg)
-		p.layout = u.(layout.SplitPaneLayout)
-		cmds = append(cmds, cmd)
-	}
-
-	// Always pass key messages to the layout to update the editor
-	if _, ok := msg.(tea.KeyMsg); ok {
-		u, cmd := p.layout.Update(msg)
-		p.layout = u.(layout.SplitPaneLayout)
-		cmds = append(cmds, cmd)
 	}
 
 	return p, tea.Batch(cmds...)
