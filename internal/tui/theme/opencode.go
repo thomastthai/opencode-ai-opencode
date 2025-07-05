@@ -107,6 +107,16 @@ func NewOpenCodeTheme() *OpenCodeTheme {
 		Light: "#ffffff", // Slightly lighter than background
 	}
 
+	// Message background colors
+	theme.UserMessageBackgroundColor = lipgloss.AdaptiveColor{
+		Dark:  darkSelection,    // Slightly different from main background
+		Light: lightSelection,   // Slightly different from main background
+	}
+	theme.AssistantMessageBackgroundColor = lipgloss.AdaptiveColor{
+		Dark:  darkCurrentLine,  // Very subtle background
+		Light: lightCurrentLine, // Very subtle background
+	}
+
 	// Border colors
 	theme.BorderNormalColor = lipgloss.AdaptiveColor{
 		Dark:  darkBorder,

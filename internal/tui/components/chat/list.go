@@ -250,9 +250,11 @@ func (m *messagesCmp) renderView() {
 		)
 	}
 
+	t := theme.CurrentTheme()
 	m.viewport.SetContent(
 		baseStyle.
 			Width(m.width).
+			Background(t.Background()).
 			Render(
 				lipgloss.JoinVertical(
 					lipgloss.Top,

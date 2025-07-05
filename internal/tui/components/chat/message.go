@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -38,6 +39,257 @@ type uiMessage struct {
 	content     string
 }
 
+// isValidHexColor validates if a string is a valid hex color format
+func isValidHexColor(hex string) bool {
+	// Match #RRGGBB or #RGB format
+	hexRegex := regexp.MustCompile(`^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$`)
+	return hexRegex.MatchString(hex)
+}
+
+// getEffectiveColors returns the effective colors to use for messages
+// Either from hex config overrides or from the theme
+func getEffectiveColors(cfg *config.Config, t theme.Theme, isUser bool) (textColor lipgloss.TerminalColor, bgColor lipgloss.TerminalColor) {
+	if cfg.TUI.MessageLayout == config.MessageLayoutMessaging {
+		if isUser {
+			// User message colors
+			if cfg.TUI.MessageLayoutConfig.UserTextColor != "" && isValidHexColor(cfg.TUI.MessageLayoutConfig.UserTextColor) {
+				textColor = lipgloss.Color(cfg.TUI.MessageLayoutConfig.UserTextColor)
+			} else {
+				textColor = t.Text()
+			}
+			
+			if cfg.TUI.MessageLayoutConfig.UserBackgroundColor != "" && isValidHexColor(cfg.TUI.MessageLayoutConfig.UserBackgroundColor) {
+				bgColor = lipgloss.Color(cfg.TUI.MessageLayoutConfig.UserBackgroundColor)
+			} else if cfg.TUI.MessageLayoutConfig.UseBackgrounds {
+				bgColor = t.UserMessageBackground()
+			} else {
+				bgColor = t.Background()
+			}
+		} else {
+			// Assistant message colors
+			if cfg.TUI.MessageLayoutConfig.AssistantTextColor != "" && isValidHexColor(cfg.TUI.MessageLayoutConfig.AssistantTextColor) {
+				textColor = lipgloss.Color(cfg.TUI.MessageLayoutConfig.AssistantTextColor)
+			} else {
+				textColor = t.TextMuted()
+			}
+			
+			if cfg.TUI.MessageLayoutConfig.AssistantBackgroundColor != "" && isValidHexColor(cfg.TUI.MessageLayoutConfig.AssistantBackgroundColor) {
+				bgColor = lipgloss.Color(cfg.TUI.MessageLayoutConfig.AssistantBackgroundColor)
+			} else if cfg.TUI.MessageLayoutConfig.UseBackgrounds {
+				bgColor = t.AssistantMessageBackground()
+			} else {
+				bgColor = t.Background()
+			}
+		}
+	} else {
+		// Classic layout - use theme colors
+		if isUser {
+			textColor = t.Text()
+		} else {
+			textColor = t.TextMuted()
+		}
+		bgColor = t.Background()
+	}
+	
+	return textColor, bgColor
+}
+
+// getBorderChar returns the effective border character for a specific type
+// Takes into account which sides are enabled for intelligent corner selection
+func getBorderChar(borderConfig *config.BorderConfig, charType string, sides *config.BorderSides) string {
+	switch charType {
+	case "vertical":
+		if borderConfig.Character != "" {
+			return borderConfig.Character
+		}
+		return "│"
+	case "horizontal":
+		if borderConfig.HorizontalChar != "" {
+			return borderConfig.HorizontalChar
+		}
+		return "─"
+	case "topLeft":
+		if borderConfig.TopLeftChar != "" {
+			return borderConfig.TopLeftChar
+		}
+		// Use intelligent default based on enabled sides
+		if sides.Top && sides.Left {
+			return "┌"
+		} else if sides.Top && !sides.Left {
+			return "─"
+		} else if !sides.Top && sides.Left {
+			return "│"
+		}
+		return "┌"
+	case "topRight":
+		if borderConfig.TopRightChar != "" {
+			return borderConfig.TopRightChar
+		}
+		// Use intelligent default based on enabled sides
+		if sides.Top && sides.Right {
+			return "┐"
+		} else if sides.Top && !sides.Right {
+			return "─"
+		} else if !sides.Top && sides.Right {
+			return "│"
+		}
+		return "┐"
+	case "bottomLeft":
+		if borderConfig.BottomLeftChar != "" {
+			return borderConfig.BottomLeftChar
+		}
+		// Use intelligent default based on enabled sides
+		if sides.Bottom && sides.Left {
+			return "└"
+		} else if sides.Bottom && !sides.Left {
+			return "─"
+		} else if !sides.Bottom && sides.Left {
+			return "│"
+		}
+		return "└"
+	case "bottomRight":
+		if borderConfig.BottomRightChar != "" {
+			return borderConfig.BottomRightChar
+		}
+		// Use intelligent default based on enabled sides
+		if sides.Bottom && sides.Right {
+			return "┘"
+		} else if sides.Bottom && !sides.Right {
+			return "─"
+		} else if !sides.Bottom && sides.Right {
+			return "│"
+		}
+		return "┘"
+	default:
+		return "│"
+	}
+}
+
+// getBorderColors returns the effective colors for a border
+func getBorderColors(borderConfig *config.BorderConfig, t theme.Theme, isUser bool, bgColor lipgloss.TerminalColor) (fg lipgloss.TerminalColor, bg lipgloss.TerminalColor) {
+	// Foreground color
+	if borderConfig.ForegroundColor != "" && isValidHexColor(borderConfig.ForegroundColor) {
+		fg = lipgloss.Color(borderConfig.ForegroundColor)
+	} else {
+		if isUser {
+			fg = t.Secondary()
+		} else {
+			fg = t.Primary()
+		}
+	}
+	
+	// Background color
+	if borderConfig.BackgroundColor != "" && isValidHexColor(borderConfig.BackgroundColor) {
+		bg = lipgloss.Color(borderConfig.BackgroundColor)
+	} else {
+		bg = bgColor
+	}
+	
+	return fg, bg
+}
+
+// createFullBorder creates a complete border around the content
+func createFullBorder(content []string, borderConfig *config.BorderConfig, t theme.Theme, isUser bool, bgColor lipgloss.TerminalColor, contentWidth int) []string {
+	if borderConfig == nil {
+		return content
+	}
+	
+	sides := borderConfig.Sides
+	if !sides.Top && !sides.Right && !sides.Bottom && !sides.Left {
+		return content
+	}
+	
+	fg, bg := getBorderColors(borderConfig, t, isUser, bgColor)
+	borderStyle := lipgloss.NewStyle().Foreground(fg).Background(bg)
+	spacingStyle := lipgloss.NewStyle().Background(bgColor)
+	
+	var result []string
+	
+	// Calculate the actual content width (max width of content lines)
+	maxContentWidth := 0
+	for _, line := range content {
+		if w := lipgloss.Width(line); w > maxContentWidth {
+			maxContentWidth = w
+		}
+	}
+	
+	// The content width should be exactly what we have, no extra padding
+	contentWidth = maxContentWidth
+	
+	// Top border - spans full width including corners
+	if sides.Top {
+		var topLine strings.Builder
+		
+		if sides.Left {
+			topLine.WriteString(borderStyle.Render(getBorderChar(borderConfig, "topLeft", &sides)))
+		} else {
+			// Add spacing if no left border but we have top border
+			topLine.WriteString(spacingStyle.Render(" "))
+		}
+		
+		// Horizontal line spans the content width
+		horizontalChar := getBorderChar(borderConfig, "horizontal", &sides)
+		topLine.WriteString(borderStyle.Render(strings.Repeat(horizontalChar, contentWidth)))
+		
+		if sides.Right {
+			topLine.WriteString(borderStyle.Render(getBorderChar(borderConfig, "topRight", &sides)))
+		} else {
+			// Add spacing if no right border but we have top border
+			topLine.WriteString(spacingStyle.Render(" "))
+		}
+		
+		result = append(result, topLine.String())
+	}
+	
+	// Content lines with left/right borders
+	for _, line := range content {
+		var contentLine strings.Builder
+		
+		if sides.Left {
+			contentLine.WriteString(borderStyle.Render(getBorderChar(borderConfig, "vertical", &sides)))
+		} else {
+			// Add consistent spacing if no left border (to match top/bottom border spacing)
+			contentLine.WriteString(spacingStyle.Render(" "))
+		}
+		
+		// Add content without extra padding since spacing is handled in renderMessage
+		contentLine.WriteString(line)
+		
+		if sides.Right {
+			contentLine.WriteString(borderStyle.Render(getBorderChar(borderConfig, "vertical", &sides)))
+		}
+		
+		result = append(result, contentLine.String())
+	}
+	
+	// Bottom border - spans full width including corners
+	if sides.Bottom {
+		var bottomLine strings.Builder
+		
+		if sides.Left {
+			bottomLine.WriteString(borderStyle.Render(getBorderChar(borderConfig, "bottomLeft", &sides)))
+		} else {
+			// Add spacing if no left border but we have bottom border
+			bottomLine.WriteString(spacingStyle.Render(" "))
+		}
+		
+		// Horizontal line spans the content width
+		horizontalChar := getBorderChar(borderConfig, "horizontal", &sides)
+		bottomLine.WriteString(borderStyle.Render(strings.Repeat(horizontalChar, contentWidth)))
+		
+		if sides.Right {
+			bottomLine.WriteString(borderStyle.Render(getBorderChar(borderConfig, "bottomRight", &sides)))
+		} else {
+			// Add spacing if no right border but we have bottom border
+			bottomLine.WriteString(spacingStyle.Render(" "))
+		}
+		
+		result = append(result, bottomLine.String())
+	}
+	
+	return result
+}
+
 func toMarkdown(content string, focused bool, width int) string {
 	r := styles.GetMarkdownRenderer(width)
 	rendered, _ := r.Render(content)
@@ -46,21 +298,108 @@ func toMarkdown(content string, focused bool, width int) string {
 
 func renderMessage(msg string, isUser bool, isFocused bool, width int, info ...string) string {
 	t := theme.CurrentTheme()
+	cfg := config.Get()
+	
+	var style lipgloss.Style
+	var messageWidth int
+	var leftPadding int
+	var rightPadding int
+	
+	// Get effective colors (either from hex config or theme)
+	textColor, bgColor := getEffectiveColors(cfg, t, isUser)
+	
+	if cfg.TUI.MessageLayout == config.MessageLayoutMessaging {
+		// Modern messaging app layout
+		if isUser {
+			// User messages: right-aligned, narrower, with background
+			messageWidth = int(float64(width) * cfg.TUI.MessageLayoutConfig.UserMessageWidth)
+			rightPadding = cfg.TUI.MessageLayoutConfig.UserRightMargin
+			leftPadding = width - messageWidth - rightPadding
+			if leftPadding < 0 {
+				leftPadding = 0
+				messageWidth = width - rightPadding
+			}
+			
+			// Create the message style without margin using effective colors
+			style = styles.BaseStyle().
+				Foreground(textColor).
+				Background(bgColor)
+				// Don't set Width() or Padding() on style as it causes gray background fill
+				
+			// Remove lipgloss borders - they cause gray background issues
+			// We'll add manual border characters instead
+		} else {
+			// Assistant messages: left-aligned, wider
+			messageWidth = int(float64(width) * cfg.TUI.MessageLayoutConfig.AssistantMessageWidth)
+			leftPadding = cfg.TUI.MessageLayoutConfig.AssistantLeftMargin
+			
+			// Create the message style without margin using effective colors
+			style = styles.BaseStyle().
+				Foreground(textColor).
+				Background(bgColor)
+				// Temporarily remove left border to test gray background
+				// BorderLeft(true).
+				// BorderForeground(t.Primary()).
+				// BorderStyle(lipgloss.ThickBorder())
+				// Don't set Width() or Padding() on style as it causes gray background fill
+		}
+	} else {
+		// Classic layout (current behavior)
+		style = styles.BaseStyle().
+			Width(width - 1).
+			BorderLeft(true).
+			Foreground(textColor).
+			BorderForeground(t.Primary()).
+			BorderStyle(lipgloss.ThickBorder()).
+			Background(bgColor)
 
-	style := styles.BaseStyle().
-		Width(width - 1).
-		BorderLeft(true).
-		Foreground(t.TextMuted()).
-		BorderForeground(t.Primary()).
-		BorderStyle(lipgloss.ThickBorder())
-
-	if isUser {
-		style = style.BorderForeground(t.Secondary())
+		if isUser {
+			style = style.BorderForeground(t.Secondary())
+		}
+		messageWidth = width - 1
+		leftPadding = 0
 	}
-
-	// Apply markdown formatting and handle background color
+	
+	// Add manual padding by adjusting the content and width
+	contentWidth := messageWidth
+	paddedContent := toMarkdown(msg, isFocused, contentWidth)
+	
+	// Add borders around the content for messaging layout
+	if cfg.TUI.MessageLayout == config.MessageLayoutMessaging {
+		lines := strings.Split(paddedContent, "\n")
+		var borderConfig *config.BorderConfig
+		
+		if isUser {
+			borderConfig = &cfg.TUI.MessageLayoutConfig.UserBorder
+		} else {
+			borderConfig = &cfg.TUI.MessageLayoutConfig.AssistantBorder
+		}
+		
+		// Remove trailing empty lines first
+		for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+			lines = lines[:len(lines)-1]
+		}
+		
+		// Add spacing to content lines
+		spacingStyle := lipgloss.NewStyle().Background(bgColor)
+		for i, line := range lines {
+			if strings.TrimSpace(line) != "" {
+				// Add padding space for better appearance
+				lines[i] = spacingStyle.Render(" ") + line + spacingStyle.Render(" ")
+			} else {
+				// Handle empty lines properly - use same width as content lines
+				lines[i] = spacingStyle.Render("  ")
+			}
+		}
+		
+		// Apply full borders around the content
+		// createFullBorder will use the actual content width automatically
+		borderedLines := createFullBorder(lines, borderConfig, t, isUser, bgColor, 0)
+		paddedContent = strings.Join(borderedLines, "\n")
+	}
+	
 	parts := []string{
-		styles.ForceReplaceBackgroundWithLipgloss(toMarkdown(msg, isFocused, width), t.Background()),
+		paddedContent,
 	}
 
 	// Remove newline at the end
@@ -75,6 +414,61 @@ func renderMessage(msg string, isUser bool, isFocused bool, width int, info ...s
 			parts...,
 		),
 	)
+
+
+	// For messaging layout, wrap in a full-width container with proper background
+	if cfg.TUI.MessageLayout == config.MessageLayoutMessaging && (leftPadding > 0 || rightPadding > 0) {
+		// Create a full-width container
+		containerStyle := lipgloss.NewStyle().
+			Width(width).
+			Background(t.Background())
+		
+		if isUser {
+			// For user messages, padding goes on both left and right
+			parts := []string{}
+			
+			// Add left padding if needed
+			if leftPadding > 0 {
+				leftPaddingStyle := lipgloss.NewStyle().
+					Width(leftPadding).
+					Height(lipgloss.Height(rendered)).
+					Background(t.Background())
+				parts = append(parts, leftPaddingStyle.Render(strings.Repeat(" ", leftPadding)))
+			}
+			
+			// Add the message
+			parts = append(parts, rendered)
+			
+			// Add right padding if needed
+			if rightPadding > 0 {
+				rightPaddingStyle := lipgloss.NewStyle().
+					Width(rightPadding).
+					Height(lipgloss.Height(rendered)).
+					Background(t.Background())
+				parts = append(parts, rightPaddingStyle.Render(strings.Repeat(" ", rightPadding)))
+			}
+			
+			rendered = containerStyle.Render(
+				lipgloss.JoinHorizontal(lipgloss.Top, parts...),
+			)
+		} else {
+			// For assistant messages, only left padding
+			if leftPadding > 0 {
+				leftPaddingStyle := lipgloss.NewStyle().
+					Width(leftPadding).
+					Height(lipgloss.Height(rendered)).
+					Background(t.Background())
+				
+				rendered = containerStyle.Render(
+					lipgloss.JoinHorizontal(
+						lipgloss.Top,
+						leftPaddingStyle.Render(strings.Repeat(" ", leftPadding)),
+						rendered,
+					),
+				)
+			}
+		}
+	}
 
 	return rendered
 }
@@ -136,7 +530,7 @@ func renderAssistantMessage(
 	baseStyle := styles.BaseStyle()
 
 	// Add finish info if available
-	if finished {
+	if finished && config.Get().TUI.ShowModelInfo {
 		switch finishData.Reason {
 		case message.FinishReasonEndTurn:
 			took := formatTimestampDiff(msg.CreatedAt, finishData.Time)
@@ -541,15 +935,32 @@ func renderToolMessage(
 	width int,
 	position int,
 ) uiMessage {
+	cfg := config.Get()
+	originalWidth := width
+	
 	if nested {
 		width = width - 3
 	}
 
 	t := theme.CurrentTheme()
 	baseStyle := styles.BaseStyle()
+	
+	// Calculate tool message width and padding for messaging layout
+	var toolWidth int
+	var leftPadding int
+	
+	if cfg.TUI.MessageLayout == config.MessageLayoutMessaging && !nested {
+		// Tool messages follow assistant message layout
+		toolWidth = int(float64(originalWidth) * cfg.TUI.MessageLayoutConfig.AssistantMessageWidth)
+		leftPadding = cfg.TUI.MessageLayoutConfig.AssistantLeftMargin
+		width = toolWidth
+	} else {
+		toolWidth = width - 1
+		leftPadding = 0
+	}
 
 	style := baseStyle.
-		Width(width - 1).
+		Width(toolWidth).
 		BorderLeft(true).
 		BorderStyle(lipgloss.ThickBorder()).
 		PaddingLeft(1).
@@ -564,11 +975,32 @@ func renderToolMessage(
 		toolAction := getToolAction(toolCall.Name)
 
 		progressText := baseStyle.
-			Width(width - 2 - lipgloss.Width(toolNameText)).
+			Width(toolWidth - 2 - lipgloss.Width(toolNameText)).
 			Foreground(t.TextMuted()).
 			Render(fmt.Sprintf("%s", toolAction))
 
 		content := style.Render(lipgloss.JoinHorizontal(lipgloss.Left, toolNameText, progressText))
+		
+		// Apply messaging layout wrapper if needed
+		if cfg.TUI.MessageLayout == config.MessageLayoutMessaging && leftPadding > 0 && !nested {
+			paddingStyle := lipgloss.NewStyle().
+				Width(leftPadding).
+				Height(lipgloss.Height(content)).
+				Background(t.Background())
+			
+			containerStyle := lipgloss.NewStyle().
+				Width(originalWidth).
+				Background(t.Background())
+			
+			content = containerStyle.Render(
+				lipgloss.JoinHorizontal(
+					lipgloss.Top,
+					paddingStyle.Render(""),
+					content,
+				),
+			)
+		}
+		
 		toolMsg := uiMessage{
 			messageType: toolMessageType,
 			position:    position,
@@ -578,15 +1010,15 @@ func renderToolMessage(
 		return toolMsg
 	}
 
-	params := renderToolParams(width-2-lipgloss.Width(toolNameText), toolCall)
+	params := renderToolParams(toolWidth-2-lipgloss.Width(toolNameText), toolCall)
 	responseContent := ""
 	if response != nil {
-		responseContent = renderToolResponse(toolCall, *response, width-2)
+		responseContent = renderToolResponse(toolCall, *response, toolWidth-2)
 		responseContent = strings.TrimSuffix(responseContent, "\n")
 	} else {
 		responseContent = baseStyle.
 			Italic(true).
-			Width(width - 2).
+			Width(toolWidth - 2).
 			Foreground(t.TextMuted()).
 			Render("Waiting for response...")
 	}
@@ -594,7 +1026,7 @@ func renderToolMessage(
 	parts := []string{}
 	if !nested {
 		formattedParams := baseStyle.
-			Width(width - 2 - lipgloss.Width(toolNameText)).
+			Width(toolWidth - 2 - lipgloss.Width(toolNameText)).
 			Foreground(t.TextMuted()).
 			Render(params)
 
@@ -604,7 +1036,7 @@ func renderToolMessage(
 			Foreground(t.TextMuted()).
 			Render(" └ ")
 		formattedParams := baseStyle.
-			Width(width - 2 - lipgloss.Width(toolNameText)).
+			Width(toolWidth - 2 - lipgloss.Width(toolNameText)).
 			Foreground(t.TextMuted()).
 			Render(params)
 		parts = append(parts, lipgloss.JoinHorizontal(lipgloss.Left, prefix, toolNameText, formattedParams))
@@ -617,7 +1049,7 @@ func renderToolMessage(
 			toolCalls = append(toolCalls, v.ToolCalls()...)
 		}
 		for _, call := range toolCalls {
-			rendered := renderToolMessage(call, []message.Message{}, messagesService, focusedUIMessageId, true, width, 0)
+			rendered := renderToolMessage(call, []message.Message{}, messagesService, focusedUIMessageId, true, originalWidth, 0)
 			parts = append(parts, rendered.content)
 		}
 	}
@@ -637,6 +1069,27 @@ func renderToolMessage(
 			parts...,
 		)
 	}
+	
+	// Apply messaging layout wrapper if needed
+	if cfg.TUI.MessageLayout == config.MessageLayoutMessaging && leftPadding > 0 && !nested {
+		paddingStyle := lipgloss.NewStyle().
+			Width(leftPadding).
+			Height(lipgloss.Height(content)).
+			Background(t.Background())
+		
+		containerStyle := lipgloss.NewStyle().
+			Width(originalWidth).
+			Background(t.Background())
+		
+		content = containerStyle.Render(
+			lipgloss.JoinHorizontal(
+				lipgloss.Top,
+				paddingStyle.Render(""),
+				content,
+			),
+		)
+	}
+	
 	toolMsg := uiMessage{
 		messageType: toolMessageType,
 		position:    position,

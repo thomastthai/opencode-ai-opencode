@@ -28,6 +28,10 @@ type Theme interface {
 	Background() lipgloss.AdaptiveColor
 	BackgroundSecondary() lipgloss.AdaptiveColor
 	BackgroundDarker() lipgloss.AdaptiveColor
+	
+	// Message background colors
+	UserMessageBackground() lipgloss.AdaptiveColor
+	AssistantMessageBackground() lipgloss.AdaptiveColor
 
 	// Border colors
 	BorderNormal() lipgloss.AdaptiveColor
@@ -99,6 +103,10 @@ type BaseTheme struct {
 	BackgroundColor    lipgloss.AdaptiveColor
 	BackgroundSecondaryColor lipgloss.AdaptiveColor
 	BackgroundDarkerColor lipgloss.AdaptiveColor
+	
+	// Message background colors
+	UserMessageBackgroundColor      lipgloss.AdaptiveColor
+	AssistantMessageBackgroundColor lipgloss.AdaptiveColor
 
 	// Border colors
 	BorderNormalColor  lipgloss.AdaptiveColor
@@ -164,6 +172,9 @@ func (t *BaseTheme) TextEmphasized() lipgloss.AdaptiveColor { return t.TextEmpha
 func (t *BaseTheme) Background() lipgloss.AdaptiveColor { return t.BackgroundColor }
 func (t *BaseTheme) BackgroundSecondary() lipgloss.AdaptiveColor { return t.BackgroundSecondaryColor }
 func (t *BaseTheme) BackgroundDarker() lipgloss.AdaptiveColor { return t.BackgroundDarkerColor }
+
+func (t *BaseTheme) UserMessageBackground() lipgloss.AdaptiveColor { return t.UserMessageBackgroundColor }
+func (t *BaseTheme) AssistantMessageBackground() lipgloss.AdaptiveColor { return t.AssistantMessageBackgroundColor }
 
 func (t *BaseTheme) BorderNormal() lipgloss.AdaptiveColor { return t.BorderNormalColor }
 func (t *BaseTheme) BorderFocused() lipgloss.AdaptiveColor { return t.BorderFocusedColor }
