@@ -158,9 +158,12 @@ func (c *completionDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, cmd)
 
 				var query string
-				query = c.pseudoSearchTextArea.Value()
-				if query != "" {
-					query = query[1:]
+				fullValue := c.pseudoSearchTextArea.Value()
+				// Extract query by removing the trigger character (/ or @)
+				if len(fullValue) > 0 && (fullValue[0] == '/' || fullValue[0] == '@') {
+					query = fullValue[1:]
+				} else {
+					query = fullValue
 				}
 
 				if query != c.query {
@@ -199,14 +202,20 @@ func (c *completionDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			return c, tea.Batch(cmds...)
 		} else {
-			items, err := c.completionProvider.GetChildEntries("")
-			if err != nil {
-				logging.Error("Failed to get child entries", err)
-			}
+			// Dialog is not focused, initialize it with the trigger character
+			triggerChar := msg.String()
+			if triggerChar == "/" || triggerChar == "@" {
+				// Load initial completions for empty query
+				items, err := c.completionProvider.GetChildEntries("")
+				if err != nil {
+					logging.Error("Failed to get child entries", err)
+				}
 
-			c.listView.SetItems(items)
-			c.pseudoSearchTextArea.SetValue(msg.String())
-			return c, c.pseudoSearchTextArea.Focus()
+				c.listView.SetItems(items)
+				c.pseudoSearchTextArea.SetValue(triggerChar)
+				c.query = "" // Reset query to ensure proper state
+				return c, c.pseudoSearchTextArea.Focus()
+			}
 		}
 	case tea.WindowSizeMsg:
 		c.width = msg.Width
