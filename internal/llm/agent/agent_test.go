@@ -286,8 +286,19 @@ func TestAgent_Run(t *testing.T) {
 		StreamSupport: true,
 		StreamEvents: []provider.ProviderEvent{
 			{
+				Type: provider.EventContentStart,
+			},
+			{
+				Type:    provider.EventContentDelta,
+				Content: "Hello!",
+			},
+			{
+				Type: provider.EventContentStop,
+			},
+			{
 				Type: provider.EventComplete,
 				Response: &provider.ProviderResponse{
+					Content:      "Hello!",
 					FinishReason: message.FinishReasonEndTurn,
 				},
 			},
@@ -426,6 +437,16 @@ func TestAgent_Run_ToolCall(t *testing.T) {
 			// Second call: after tool execution, returns final response
 			{
 				{
+					Type: provider.EventContentStart,
+				},
+				{
+					Type:    provider.EventContentDelta,
+					Content: "Final response after tool execution",
+				},
+				{
+					Type: provider.EventContentStop,
+				},
+				{
 					Type: provider.EventComplete,
 					Response: &provider.ProviderResponse{
 						Content:      "Final response after tool execution",
@@ -474,9 +495,17 @@ func TestAgent_Run_ToolCall(t *testing.T) {
 	events, err := agentSvc.Run(context.Background(), sessionID, prompt)
 	assert.NoError(t, err)
 
-	// We expect a single response event after the tool call flow is complete.
+	// We expect a single response event
 	event := <-events
 	assert.Equal(t, AgentEventTypeResponse, event.Type)
 	assert.NoError(t, event.Error)
-	time.Sleep(500 * time.Millisecond)
+	assert.True(t, event.Done)
+	
+	// Wait for channel to close to ensure cleanup is complete
+	_, ok := <-events
+	assert.False(t, ok, "events channel should be closed")
+	
+	// Verify the agent is no longer busy
+	assert.False(t, agentSvc.IsSessionBusy(sessionID))
+	assert.False(t, agentSvc.IsBusy())
 }

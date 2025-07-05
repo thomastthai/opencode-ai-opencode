@@ -347,25 +347,29 @@ func hasUnfinishedToolCalls(messages []message.Message) bool {
 
 func (m *messagesCmp) working() string {
 	text := ""
-	if m.IsAgentWorking() && len(m.messages) > 0 {
-		t := theme.CurrentTheme()
-		baseStyle := styles.BaseStyle()
-
-		task := "Thinking..."
+	if len(m.messages) > 0 {
 		lastMessage := m.messages[len(m.messages)-1]
-		if hasToolsWithoutResponse(m.messages) {
-			task = "Waiting for tool response..."
-		} else if hasUnfinishedToolCalls(m.messages) {
-			task = "Building tool call..."
-		} else if !lastMessage.IsFinished() {
-			task = "Generating..."
-		}
-		if task != "" {
-			text += baseStyle.
-				Width(m.width).
-				Foreground(t.Primary()).
-				Bold(true).
-				Render(fmt.Sprintf("%s %s ", m.spinner.View(), task))
+		// Only show working status if agent is busy AND the last message is not finished
+		// This prevents showing "Thinking..." after the message is complete but before cleanup
+		if m.IsAgentWorking() && !lastMessage.IsFinished() {
+			t := theme.CurrentTheme()
+			baseStyle := styles.BaseStyle()
+
+			task := "Thinking..."
+			if hasToolsWithoutResponse(m.messages) {
+				task = "Waiting for tool response..."
+			} else if hasUnfinishedToolCalls(m.messages) {
+				task = "Building tool call..."
+			} else if lastMessage.Role == message.Assistant && !lastMessage.IsFinished() {
+				task = "Generating..."
+			}
+			if task != "" {
+				text += baseStyle.
+					Width(m.width).
+					Foreground(t.Primary()).
+					Bold(true).
+					Render(fmt.Sprintf("%s %s ", m.spinner.View(), task))
+			}
 		}
 	}
 	return text

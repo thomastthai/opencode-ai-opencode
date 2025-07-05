@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Essential Commands
 
 **Build and Run:**
+
 ```bash
 go build -o opencode                    # Build the main binary
 ./opencode                              # Run the application
@@ -12,6 +13,7 @@ go build -o opencode                    # Build the main binary
 ```
 
 **Testing:**
+
 ```bash
 go test ./...                           # Run all tests
 go test ./internal/commands             # Run tests for specific package
@@ -19,6 +21,7 @@ go test -v ./internal/commands -run TestSpecificTest  # Run single test with ver
 ```
 
 **Development:**
+
 ```bash
 go run main.go                          # Run without building
 go mod tidy                             # Clean up dependencies
@@ -63,3 +66,8 @@ OpenCode is a terminal-based AI assistant built with Go, featuring:
   - TUI dialog integration with visual feedback
   - Multi-source configuration priority handling
   - Error scenarios and edge case handling
+
+## git
+
+When making a git commit, do not include an reference or advertising from Claude or Claude Code. The commit message should be clear and concise, focusing on the changes made in the codebase.
+

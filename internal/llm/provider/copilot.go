@@ -360,7 +360,8 @@ func (c *copilotClient) send(ctx context.Context, messages []message.Message, to
 		toolCalls := c.toolCalls(*copilotResponse)
 		finishReason := c.finishReason(string(copilotResponse.Choices[0].FinishReason))
 
-		if len(toolCalls) > 0 {
+		// Only override finish reason if the API didn't explicitly say to stop
+		if len(toolCalls) > 0 && finishReason != message.FinishReasonEndTurn {
 			finishReason = message.FinishReasonToolUse
 		}
 
@@ -490,7 +491,8 @@ func (c *copilotClient) stream(ctx context.Context, messages []message.Message, 
 				if len(acc.ChatCompletion.Choices[0].Message.ToolCalls) > 0 {
 					toolCalls = append(toolCalls, c.toolCalls(acc.ChatCompletion)...)
 				}
-				if len(toolCalls) > 0 {
+				// Only override finish reason if the API didn't explicitly say to stop
+				if len(toolCalls) > 0 && finishReason != message.FinishReasonEndTurn {
 					finishReason = message.FinishReasonToolUse
 				}
 

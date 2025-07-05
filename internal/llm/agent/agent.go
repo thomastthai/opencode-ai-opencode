@@ -331,7 +331,7 @@ func (a *agent) processGeneration(ctx context.Context, sessionID, content string
 		} else {
 			logging.Info("Result", "message", agentMessage.FinishReason(), "toolResults", toolResults)
 		}
-				if agentMessage.FinishReason() == message.FinishReasonToolUse {
+		if agentMessage.FinishReason() == message.FinishReasonToolUse {
 			a.testLog("checkpoint 3")
 			if toolResults == nil || len(toolResults.Parts) == 0 {
 				logging.Error("Provider returned FinishReasonToolUse without toolResults; emitting error event")

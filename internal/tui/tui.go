@@ -296,6 +296,12 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		case key.Matches(msg, keys.Quit):
 			return a, tea.Quit
+		case msg.Type == tea.KeyEsc:
+			// Close any open dialogs
+			if a.showHelp {
+				a.showHelp = false
+				return a, nil
+			}
 		}
 
 	// Handle compact session message
