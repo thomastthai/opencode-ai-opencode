@@ -1,0 +1,83 @@
+{
+  "description": "Complete border configuration example showing all available options",
+  "tui": {
+    "messageLayout": "messaging",
+    "messageLayoutConfig": {
+      "userMessageWidth": 0.65,
+      "assistantMessageWidth": 0.75,
+      "userRightMargin": 10,
+      "assistantLeftMargin": 2,
+      "useBackgrounds": true,
+      "useRoundedBorders": true,
+      
+      "// Color Options": "Hex colors for text and background",
+      "userTextColor": "#ffffff",
+      "userBackgroundColor": "#2563eb",
+      "assistantTextColor": "#374151", 
+      "assistantBackgroundColor": "#f3f4f6",
+      
+      "// User Border Configuration": "Configure borders for user messages",
+      "userBorder": {
+        "character": "│",
+        "horizontalChar": "─",
+        "topLeftChar": "┌",
+        "topRightChar": "┐",
+        "bottomLeftChar": "└", 
+        "bottomRightChar": "┘",
+        "// Border Character Options": "Vertical: │ ┃ ║ | ▌, Horizontal: ─ ━ ═ -, Corners: ┌┐└┘ ┏┓┗┛ ╔╗╚╝ ╭╮╰╯",
+        "foregroundColor": "#1d4ed8",
+        "// Hex Colors": "Use hex format like #ff0000 or leave empty for theme defaults",
+        "backgroundColor": "",
+        "// Border Sides": "Control which sides show borders",
+        "sides": {
+          "top": false,
+          "right": true,
+          "bottom": false,
+          "left": false
+        }
+      },
+      
+      "// Assistant Border Configuration": "Configure borders for assistant messages", 
+      "assistantBorder": {
+        "character": "│",
+        "horizontalChar": "─",
+        "topLeftChar": "┌",
+        "topRightChar": "┐",
+        "bottomLeftChar": "└",
+        "bottomRightChar": "┘",
+        "foregroundColor": "#6b7280",
+        "backgroundColor": "",
+        "sides": {
+          "top": false,
+          "right": false,
+          "bottom": false,
+          "left": true
+        }
+      }
+    }
+  },
+  
+  "// Usage Examples": "Different border configurations you can try",
+  "examples": {
+    "minimal": {
+      "description": "No borders, clean look",
+      "userBorder": {"sides": {"top": false, "right": false, "bottom": false, "left": false}},
+      "assistantBorder": {"sides": {"top": false, "right": false, "bottom": false, "left": false}}
+    },
+    "full_box": {
+      "description": "Complete box borders around messages",
+      "userBorder": {"character": "█", "sides": {"top": true, "right": true, "bottom": true, "left": true}},
+      "assistantBorder": {"character": "▌", "sides": {"top": true, "right": true, "bottom": true, "left": true}}
+    },
+    "accent_left_right": {
+      "description": "Left border for assistant, right border for user",
+      "userBorder": {"character": "▶", "sides": {"right": true}},
+      "assistantBorder": {"character": "◂", "sides": {"left": true}}
+    },
+    "thick_borders": {
+      "description": "Thick borders with custom colors",
+      "userBorder": {"character": "┃", "foregroundColor": "#ef4444", "sides": {"right": true}},
+      "assistantBorder": {"character": "┃", "foregroundColor": "#22c55e", "sides": {"left": true}}
+    }
+  }
+}

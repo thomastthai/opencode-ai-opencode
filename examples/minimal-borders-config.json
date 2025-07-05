@@ -1,0 +1,39 @@
+{
+  "tui": {
+    "messageLayout": "messaging",
+    "messageLayoutConfig": {
+      "userMessageWidth": 0.65,
+      "assistantMessageWidth": 0.75,
+      "userRightMargin": 10,
+      "assistantLeftMargin": 2,
+      "useBackgrounds": false,
+      "useRoundedBorders": false,
+      "userTextColor": "",
+      "userBackgroundColor": "",
+      "assistantTextColor": "",
+      "assistantBackgroundColor": "",
+      "userBorder": {
+        "character": "",
+        "foregroundColor": "",
+        "backgroundColor": "",
+        "sides": {
+          "top": false,
+          "right": false,
+          "bottom": false,
+          "left": false
+        }
+      },
+      "assistantBorder": {
+        "character": "",
+        "foregroundColor": "",
+        "backgroundColor": "",
+        "sides": {
+          "top": false,
+          "right": false,
+          "bottom": false,
+          "left": false
+        }
+      }
+    }
+  }
+}

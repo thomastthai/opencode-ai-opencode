@@ -1,0 +1,17 @@
+{
+  "tui": {
+    "messageLayout": "messaging",
+    "messageLayoutConfig": {
+      "userMessageWidth": 0.65,
+      "assistantMessageWidth": 0.75,
+      "userRightMargin": 10,
+      "assistantLeftMargin": 2,
+      "useBackgrounds": true,
+      "useRoundedBorders": true,
+      "userTextColor": "#111827",
+      "userBackgroundColor": "#dbeafe",
+      "assistantTextColor": "#374151",
+      "assistantBackgroundColor": "#f3f4f6"
+    }
+  }
+}

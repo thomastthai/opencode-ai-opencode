@@ -1,0 +1,49 @@
+{
+  "tui": {
+    "messageLayout": "messaging",
+    "messageLayoutConfig": {
+      "userMessageWidth": 0.65,
+      "assistantMessageWidth": 0.75,
+      "userRightMargin": 10,
+      "assistantLeftMargin": 2,
+      "useBackgrounds": true,
+      "useRoundedBorders": true,
+      "userTextColor": "#ffffff",
+      "userBackgroundColor": "#8b5cf6",
+      "assistantTextColor": "#374151",
+      "assistantBackgroundColor": "#f3f4f6",
+      "userBorder": {
+        "character": "│",
+        "horizontalChar": "─",
+        "topLeftChar": "╭",
+        "topRightChar": "╮",
+        "bottomLeftChar": "╰",
+        "bottomRightChar": "╯",
+        "foregroundColor": "#a855f7",
+        "backgroundColor": "",
+        "sides": {
+          "top": true,
+          "right": true,
+          "bottom": true,
+          "left": true
+        }
+      },
+      "assistantBorder": {
+        "character": "│",
+        "horizontalChar": "─", 
+        "topLeftChar": "╭",
+        "topRightChar": "╮",
+        "bottomLeftChar": "╰",
+        "bottomRightChar": "╯",
+        "foregroundColor": "#6b7280",
+        "backgroundColor": "",
+        "sides": {
+          "top": true,
+          "right": true,
+          "bottom": true,
+          "left": true
+        }
+      }
+    }
+  }
+}
