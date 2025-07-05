@@ -136,6 +136,128 @@ You can override this in your configuration file:
 
 This is useful if you want to use a different shell than your default system shell, or if you need to pass specific arguments to the shell.
 
+### TUI Configuration
+
+OpenCode supports advanced TUI customization including themes, message layouts, colors, and borders.
+
+#### Message Layouts
+
+Choose between different chat message layouts:
+
+| Layout | Description |
+|--------|-------------|
+| `classic` | Traditional left-aligned layout with simple borders |
+| `messaging` | Modern messaging app style with customizable colors and borders |
+
+#### Hex Color Customization
+
+For the `messaging` layout, you can override theme colors with custom hex colors:
+
+```json
+{
+  "tui": {
+    "messageLayout": "messaging",
+    "messageLayoutConfig": {
+      "userTextColor": "#ffffff",
+      "userBackgroundColor": "#2563eb",
+      "assistantTextColor": "#374151",
+      "assistantBackgroundColor": "#f3f4f6"
+    }
+  }
+}
+```
+
+#### Border Configuration
+
+Customize message borders with full control over characters, colors, and which sides to show:
+
+```json
+{
+  "tui": {
+    "messageLayout": "messaging",
+    "messageLayoutConfig": {
+      "userBorder": {
+        "character": "│",
+        "horizontalChar": "─",
+        "topLeftChar": "┌",
+        "topRightChar": "┐",
+        "bottomLeftChar": "└",
+        "bottomRightChar": "┘",
+        "foregroundColor": "#1d4ed8",
+        "backgroundColor": "",
+        "sides": {
+          "top": true,
+          "right": true,
+          "bottom": true,
+          "left": true
+        }
+      },
+      "assistantBorder": {
+        "character": "│",
+        "horizontalChar": "─",
+        "topLeftChar": "┌",
+        "topRightChar": "┐",
+        "bottomLeftChar": "└",
+        "bottomRightChar": "┘",
+        "foregroundColor": "#6b7280",
+        "backgroundColor": "",
+        "sides": {
+          "top": true,
+          "right": true,
+          "bottom": true,
+          "left": true
+        }
+      }
+    }
+  }
+}
+```
+
+#### Border Character Options
+
+You can use various Unicode characters for borders:
+
+| Type | Examples |
+|------|----------|
+| **Vertical** | `│` `┃` `║` `|` `▌` |
+| **Horizontal** | `─` `━` `═` `-` `▬` |
+| **Corners** | `┌┐└┘` `┏┓┗┛` `╔╗╚╝` `╭╮╰╯` |
+| **Block** | `▛▜▙▟` `█▌▐` |
+
+#### Configuration Examples
+
+**Minimal Borders:**
+```json
+{
+  "tui": {
+    "messageLayoutConfig": {
+      "userBorder": {
+        "sides": {"right": true}
+      },
+      "assistantBorder": {
+        "sides": {"left": true}
+      }
+    }
+  }
+}
+```
+
+**Thick Colored Borders:**
+```json
+{
+  "tui": {
+    "messageLayoutConfig": {
+      "userBorder": {
+        "character": "┃",
+        "horizontalChar": "━",
+        "foregroundColor": "#ef4444",
+        "sides": {"top": true, "right": true, "bottom": true}
+      }
+    }
+  }
+}
+```
+
 ### Configuration File Structure
 
 ```json
@@ -185,6 +307,35 @@ This is useful if you want to use a different shell than your default system she
     "title": {
       "model": "claude-3.7-sonnet",
       "maxTokens": 80
+    }
+  },
+  "tui": {
+    "theme": "opencode",
+    "showModelInfo": true,
+    "messageLayout": "messaging",
+    "messageLayoutConfig": {
+      "userMessageWidth": 0.65,
+      "assistantMessageWidth": 0.75,
+      "userRightMargin": 10,
+      "assistantLeftMargin": 2,
+      "useBackgrounds": true,
+      "useRoundedBorders": true,
+      "userTextColor": "#ffffff",
+      "userBackgroundColor": "#2563eb",
+      "assistantTextColor": "#374151",
+      "assistantBackgroundColor": "#f3f4f6",
+      "userBorder": {
+        "character": "│",
+        "horizontalChar": "─",
+        "foregroundColor": "#1d4ed8",
+        "sides": {"top": true, "right": true, "bottom": true, "left": true}
+      },
+      "assistantBorder": {
+        "character": "│",
+        "horizontalChar": "─",
+        "foregroundColor": "#6b7280",
+        "sides": {"top": true, "right": true, "bottom": true, "left": true}
+      }
     }
   },
   "shell": {
