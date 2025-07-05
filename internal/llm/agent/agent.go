@@ -241,7 +241,6 @@ func (a *agent) Run(ctx context.Context, sessionID string, content string, attac
                 events <- a.err(fmt.Errorf("panic while running the agent"))
             }
 			logging.Debug("Request completed", "sessionID", sessionID)
-			a.ActiveRequests.Delete(sessionID)
 			cancel()
 			close(events)
 		}()
@@ -254,6 +253,11 @@ func (a *agent) Run(ctx context.Context, sessionID string, content string, attac
 		if result.Error != nil && !errors.Is(result.Error, ErrRequestCancelled) && !errors.Is(result.Error, context.Canceled) {
 			logging.ErrorPersist(result.Error.Error())
 		}
+		
+		// Remove from ActiveRequests BEFORE publishing/sending the final event
+		// This ensures IsSessionBusy() returns false when the UI receives the completion event
+		a.ActiveRequests.Delete(sessionID)
+		
 		a.Publish(pubsub.CreatedEvent, result)
 		events <- result
 	}()
