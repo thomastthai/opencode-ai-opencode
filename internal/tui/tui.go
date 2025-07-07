@@ -315,12 +315,17 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Get the current session ID from the chat page
 		chatPage, ok := a.pages[page.ChatPage].(interface{ GetCurrentSessionID() string })
-		if !ok || chatPage.GetCurrentSessionID() == "" {
+		if !ok {
+			a.isCompacting = false
+			logging.Error("Chat page doesn't implement GetCurrentSessionID")
+			return a, util.ReportWarn("Unable to get current session")
+		}
+		
+		sessionID := chatPage.GetCurrentSessionID()
+		if sessionID == "" {
 			a.isCompacting = false
 			return a, util.ReportWarn("No active session to summarize")
 		}
-
-		sessionID := chatPage.GetCurrentSessionID()
 		
 		// Start the summarization process
 		return a, func() tea.Msg {
