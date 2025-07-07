@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/opencode-ai/opencode/internal/app"
 	"github.com/opencode-ai/opencode/internal/commands"
 	"github.com/opencode-ai/opencode/internal/tui/components/dialog"
 )
@@ -20,6 +21,15 @@ func NewSlashCommandProvider() dialog.CompletionProvider {
 	registry := commands.GetGlobalRegistry()
 	return &slashCommandProvider{
 		parser:   commands.NewCommandParser(registry),
+		registry: registry,
+	}
+}
+
+// NewSlashCommandProviderWithApp creates a new slash command completion provider with app context
+func NewSlashCommandProviderWithApp(app *app.App) dialog.CompletionProvider {
+	registry := commands.GetGlobalRegistry()
+	return &slashCommandProvider{
+		parser:   commands.NewCommandParserWithApp(registry, app),
 		registry: registry,
 	}
 }
@@ -76,33 +86,29 @@ func (s *SlashCommandItem) Render(selected bool, width int) string {
 	return s.CompletionItem.Render(selected, width)
 }
 
-// HandleTabCompletion handles tab key for command completion
-func HandleTabCompletion(provider dialog.CompletionProvider, input string) (string, []dialog.CompletionItemI, error) {
-	if p, ok := provider.(*slashCommandProvider); ok {
-		completed, options := p.parser.GetTabCompletion(input)
-		
-		if options == nil {
-			// Single match or no change
-			return completed, nil, nil
-		}
-		
-		// Convert options to completion items
-		items := make([]dialog.CompletionItemI, len(options))
-		for i, opt := range options {
-			items[i] = &SlashCommandItem{
-				CompletionItem: dialog.CompletionItem{
-					Title: fmt.Sprintf("%s %s", opt.Icon, opt.Display),
-					Value: opt.Complete,
-				},
-				Description: opt.Description,
-				Complete:    opt.Complete,
-			}
-		}
-		
-		return completed, items, nil
+// HandleTabCompletion implements TabHandler interface for tab completion
+func (p *slashCommandProvider) HandleTabCompletion(input string) (string, []dialog.CompletionItemI, error) {
+	completed, options := p.parser.GetTabCompletion(input)
+	
+	if options == nil {
+		// Single match or no change
+		return completed, nil, nil
 	}
 	
-	return input, nil, fmt.Errorf("not a slash command provider")
+	// Convert options to completion items
+	items := make([]dialog.CompletionItemI, len(options))
+	for i, opt := range options {
+		items[i] = &SlashCommandItem{
+			CompletionItem: dialog.CompletionItem{
+				Title: fmt.Sprintf("%s %s", opt.Icon, opt.Display),
+				Value: opt.Complete,
+			},
+			Description: opt.Description,
+			Complete:    opt.Complete,
+		}
+	}
+	
+	return completed, items, nil
 }
 
 // ParseSlashCommand parses a slash command string

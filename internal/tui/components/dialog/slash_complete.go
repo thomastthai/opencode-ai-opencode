@@ -50,12 +50,6 @@ func HandleSlashCommandCompletion(provider CompletionProvider, editorValue strin
 	}
 }
 
-// HandleTabCompletion handles tab key for slash command completion
-func HandleTabCompletion(dialog CompletionDialog, editorValue string) tea.Cmd {
-	// For now, tab completion is disabled to avoid circular imports
-	// This will be refactored in a follow-up
-	return nil
-}
 
 // completionDialogKeys with tab support
 var slashCompletionDialogKeys = struct {
@@ -82,9 +76,9 @@ var slashCompletionDialogKeys = struct {
 func UpdateCompletionDialogForSlashCommands(c *completionDialogCmp, msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if key.Matches(msg, slashCompletionDialogKeys.Tab) && c.completionProvider.GetId() == "slash-commands" {
+		if key.Matches(msg, slashCompletionDialogKeys.Tab) {
 			// Handle tab completion
-			cmd := HandleTabCompletion(c, c.pseudoSearchTextArea.Value())
+			cmd := HandleTabKey(c)
 			if cmd != nil {
 				return c, cmd
 			}

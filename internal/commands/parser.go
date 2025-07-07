@@ -3,6 +3,8 @@ package commands
 import (
 	"fmt"
 	"strings"
+
+	"github.com/opencode-ai/opencode/internal/app"
 )
 
 // SlashCommand represents a parsed slash command with its components
@@ -27,6 +29,7 @@ const (
 type CommandParser struct {
 	registry         *CommandRegistry
 	hierarchicalReg  *HierarchicalRegistry
+	app             *app.App
 }
 
 // NewCommandParser creates a new command parser
@@ -39,6 +42,13 @@ func NewCommandParser(registry *CommandRegistry) *CommandParser {
 		registry:        registry,
 		hierarchicalReg: hierarchicalReg,
 	}
+}
+
+// NewCommandParserWithApp creates a parser with app context for dynamic completions
+func NewCommandParserWithApp(registry *CommandRegistry, app *app.App) *CommandParser {
+	parser := NewCommandParser(registry)
+	parser.app = app
+	return parser
 }
 
 // Parse parses a command string into its components
@@ -192,8 +202,12 @@ func (p *CommandParser) getVerbCompletions(topic, partial string) []CommandCompl
 
 // getArgCompletions returns completions for arguments
 func (p *CommandParser) getArgCompletions(topic, verb string, args []string) []CommandCompletion {
-	// This will be expanded to provide context-aware completions
-	// For now, return empty to indicate free-form input
+	// Use dynamic completions if app context is available
+	if p.app != nil {
+		return GetDynamicCompletions(topic, verb, args, p.app)
+	}
+	
+	// Return empty to indicate free-form input
 	return nil
 }
 

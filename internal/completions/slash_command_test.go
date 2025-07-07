@@ -23,14 +23,12 @@ func TestSlashCommandProvider(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Greater(t, len(items), 0, "Should have topic completions")
 		
-		// Check that we have expected topics
+		// Check that we have expected topics by looking at the values
 		topics := make(map[string]bool)
 		for _, item := range items {
-			// Extract topic from display value (e.g., "💬 session" -> "session")
-			parts := strings.Fields(item.DisplayValue())
-			if len(parts) > 1 {
-				topics[parts[1]] = true
-			}
+			// The value should be like "/session ", so trim the / and space
+			value := strings.TrimSpace(strings.TrimPrefix(item.GetValue(), "/"))
+			topics[value] = true
 		}
 		
 		assert.True(t, topics["session"], "Should have session topic")
@@ -58,7 +56,8 @@ func TestSlashCommandProvider(t *testing.T) {
 	})
 
 	t.Run("tab completion single match", func(t *testing.T) {
-		completed, options, err := HandleTabCompletion(provider, "/se")
+		slashProvider := provider.(*slashCommandProvider)
+		completed, options, err := slashProvider.HandleTabCompletion("/se")
 		
 		assert.NoError(t, err)
 		assert.Equal(t, "/session ", completed)
@@ -66,7 +65,8 @@ func TestSlashCommandProvider(t *testing.T) {
 	})
 
 	t.Run("tab completion multiple matches", func(t *testing.T) {
-		completed, options, err := HandleTabCompletion(provider, "/s")
+		slashProvider := provider.(*slashCommandProvider)
+		completed, options, err := slashProvider.HandleTabCompletion("/s")
 		
 		assert.NoError(t, err)
 		assert.Equal(t, "/s", completed, "Should return original for ambiguous match")

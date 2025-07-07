@@ -130,7 +130,7 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p.showCompletionDialog = false
 		
 		// Create parser and execute command
-		parser := commands.NewCommandParser(commands.GetGlobalRegistry())
+		parser := commands.NewCommandParserWithApp(commands.GetGlobalRegistry(), p.app)
 		cmd := dialog.ExecuteSlashCommand(parser, msg.Raw)
 		if cmd != nil {
 			cmds = append(cmds, cmd)
@@ -316,7 +316,7 @@ func (p *chatPage) BindingKeys() []key.Binding {
 
 func NewChatPage(app *app.App) tea.Model {
 	fileCompletionProvider := completions.NewFileAndFolderContextGroup()
-	commandCompletionProvider := completions.NewSlashCommandProvider()
+	commandCompletionProvider := completions.NewSlashCommandProviderWithApp(app)
 
 	completionDialog := dialog.NewCompletionDialogCmp(fileCompletionProvider)
 
