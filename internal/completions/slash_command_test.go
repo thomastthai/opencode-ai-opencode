@@ -36,15 +36,15 @@ func TestSlashCommandProvider(t *testing.T) {
 		assert.True(t, topics["help"], "Should have help topic")
 	})
 
-	t.Run("get items for verbs", func(t *testing.T) {
+	t.Run("get items for commands", func(t *testing.T) {
 		items, err := provider.GetChildEntries("/session ")
 		assert.NoError(t, err)
-		assert.Greater(t, len(items), 0, "Should have verb completions")
+		assert.Greater(t, len(items), 0, "Should have command completions")
 		
 		// Check that values are complete commands
 		for _, item := range items {
 			assert.True(t, strings.HasPrefix(item.GetValue(), "/session "), 
-				"Verb completion should include topic")
+				"Command completion should include topic")
 		}
 	})
 
@@ -77,7 +77,7 @@ func TestSlashCommandProvider(t *testing.T) {
 		cmd := ParseSlashCommand("/session new my-session")
 		
 		assert.Equal(t, "session", cmd.Topic)
-		assert.Equal(t, "new", cmd.Verb)
+		assert.Equal(t, "new", cmd.Command)
 		assert.Equal(t, []string{"my-session"}, cmd.Args)
 	})
 

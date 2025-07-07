@@ -12,11 +12,11 @@ type Topic struct {
 	Name        string
 	Description string
 	Icon        string
-	Verbs       map[string]*Verb
+	Commands    map[string]*HierCommand
 }
 
-// Verb represents an action within a topic (e.g., new, list, delete)
-type Verb struct {
+// HierCommand represents an action within a topic (e.g., new, list, delete)
+type HierCommand struct {
 	ID          string
 	Name        string
 	Description string
@@ -26,7 +26,7 @@ type Verb struct {
 	MaxArgs     int
 }
 
-// HierarchicalRegistry manages commands in a topic/verb structure
+// HierarchicalRegistry manages commands in a topic/command structure
 type HierarchicalRegistry struct {
 	topics map[string]*Topic
 }
@@ -43,23 +43,23 @@ func (r *HierarchicalRegistry) RegisterTopic(topic *Topic) error {
 	if _, exists := r.topics[topic.ID]; exists {
 		return fmt.Errorf("topic '%s' already registered", topic.ID)
 	}
-	if topic.Verbs == nil {
-		topic.Verbs = make(map[string]*Verb)
+	if topic.Commands == nil {
+		topic.Commands = make(map[string]*HierCommand)
 	}
 	r.topics[topic.ID] = topic
 	return nil
 }
 
-// RegisterVerb registers a verb under a topic
-func (r *HierarchicalRegistry) RegisterVerb(topicID string, verb *Verb) error {
+// RegisterCommand registers a command under a topic
+func (r *HierarchicalRegistry) RegisterCommand(topicID string, command *HierCommand) error {
 	topic, exists := r.topics[topicID]
 	if !exists {
 		return fmt.Errorf("topic '%s' not found", topicID)
 	}
-	if _, exists := topic.Verbs[verb.ID]; exists {
-		return fmt.Errorf("verb '%s' already registered in topic '%s'", verb.ID, topicID)
+	if _, exists := topic.Commands[command.ID]; exists {
+		return fmt.Errorf("command '%s' already registered in topic '%s'", command.ID, topicID)
 	}
-	topic.Verbs[verb.ID] = verb
+	topic.Commands[command.ID] = command
 	return nil
 }
 
@@ -69,14 +69,14 @@ func (r *HierarchicalRegistry) GetTopic(id string) (*Topic, bool) {
 	return topic, exists
 }
 
-// GetVerb retrieves a verb from a topic
-func (r *HierarchicalRegistry) GetVerb(topicID, verbID string) (*Verb, bool) {
+// GetCommand retrieves a command from a topic
+func (r *HierarchicalRegistry) GetCommand(topicID, commandID string) (*HierCommand, bool) {
 	topic, exists := r.topics[topicID]
 	if !exists {
 		return nil, false
 	}
-	verb, exists := topic.Verbs[verbID]
-	return verb, exists
+	command, exists := topic.Commands[commandID]
+	return command, exists
 }
 
 // ListTopics returns all registered topics
@@ -90,17 +90,17 @@ func (r *HierarchicalRegistry) ListTopics() []*Topic {
 
 // Execute runs a command based on parsed input
 func (r *HierarchicalRegistry) Execute(ctx context.Context, cmd SlashCommand) error {
-	verb, exists := r.GetVerb(cmd.Topic, cmd.Verb)
+	command, exists := r.GetCommand(cmd.Topic, cmd.Command)
 	if !exists {
-		return fmt.Errorf("command not found: /%s %s", cmd.Topic, cmd.Verb)
+		return fmt.Errorf("command not found: /%s %s", cmd.Topic, cmd.Command)
 	}
 
 	// Validate args
-	if len(cmd.Args) < verb.MinArgs {
-		return fmt.Errorf("insufficient arguments: expected at least %d, got %d", verb.MinArgs, len(cmd.Args))
+	if len(cmd.Args) < command.MinArgs {
+		return fmt.Errorf("insufficient arguments: expected at least %d, got %d", command.MinArgs, len(cmd.Args))
 	}
-	if verb.MaxArgs >= 0 && len(cmd.Args) > verb.MaxArgs {
-		return fmt.Errorf("too many arguments: expected at most %d, got %d", verb.MaxArgs, len(cmd.Args))
+	if command.MaxArgs >= 0 && len(cmd.Args) > command.MaxArgs {
+		return fmt.Errorf("too many arguments: expected at most %d, got %d", command.MaxArgs, len(cmd.Args))
 	}
 
 	// Convert args to map for handler
@@ -109,27 +109,27 @@ func (r *HierarchicalRegistry) Execute(ctx context.Context, cmd SlashCommand) er
 		"raw":  cmd.Raw,
 	}
 
-	if verb.Handler == nil {
-		return fmt.Errorf("no handler for command: /%s %s", cmd.Topic, cmd.Verb)
+	if command.Handler == nil {
+		return fmt.Errorf("no handler for command: /%s %s", cmd.Topic, cmd.Command)
 	}
 
-	return verb.Handler(ctx, args)
+	return command.Handler(ctx, args)
 }
 
-// GetCompletionsForTopic returns verb completions for a topic
+// GetCompletionsForTopic returns command completions for a topic
 func (r *HierarchicalRegistry) GetCompletionsForTopic(topicID string) []CommandCompletion {
 	topic, exists := r.topics[topicID]
 	if !exists {
 		return nil
 	}
 
-	completions := make([]CommandCompletion, 0, len(topic.Verbs))
-	for _, verb := range topic.Verbs {
+	completions := make([]CommandCompletion, 0, len(topic.Commands))
+	for _, command := range topic.Commands {
 		completions = append(completions, CommandCompletion{
-			Value:       verb.ID,
-			Display:     verb.Name,
-			Description: verb.Description,
-			Complete:    fmt.Sprintf("/%s %s ", topicID, verb.ID),
+			Value:       command.ID,
+			Display:     command.Name,
+			Description: command.Description,
+			Complete:    fmt.Sprintf("/%s %s ", topicID, command.ID),
 		})
 	}
 	return completions
@@ -146,7 +146,7 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 	}
 	registry.RegisterTopic(sessionTopic)
 
-	registry.RegisterVerb("session", &Verb{
+	registry.RegisterCommand("session", &HierCommand{
 		ID:          "new",
 		Name:        "New",
 		Description: "Create a new session",
@@ -156,7 +156,7 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 		MaxArgs:     1,
 	})
 
-	registry.RegisterVerb("session", &Verb{
+	registry.RegisterCommand("session", &HierCommand{
 		ID:          "list",
 		Name:        "List",
 		Description: "List all sessions",
@@ -165,7 +165,7 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 		MaxArgs:     0,
 	})
 
-	registry.RegisterVerb("session", &Verb{
+	registry.RegisterCommand("session", &HierCommand{
 		ID:          "clear",
 		Name:        "Clear",
 		Description: "Clear current session",
@@ -174,7 +174,7 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 		MaxArgs:     0,
 	})
 
-	registry.RegisterVerb("session", &Verb{
+	registry.RegisterCommand("session", &HierCommand{
 		ID:          "compact",
 		Name:        "Compact",
 		Description: "Compact current session",
@@ -193,7 +193,7 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 	}
 	registry.RegisterTopic(configTopic)
 
-	registry.RegisterVerb("config", &Verb{
+	registry.RegisterCommand("config", &HierCommand{
 		ID:          "show",
 		Name:        "Show",
 		Description: "View configuration",
@@ -202,7 +202,7 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 		MaxArgs:     0,
 	})
 
-	registry.RegisterVerb("config", &Verb{
+	registry.RegisterCommand("config", &HierCommand{
 		ID:          "model",
 		Name:        "Model",
 		Description: "Select AI model",
@@ -221,7 +221,7 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 	}
 	registry.RegisterTopic(projectTopic)
 
-	registry.RegisterVerb("project", &Verb{
+	registry.RegisterCommand("project", &HierCommand{
 		ID:          "init",
 		Name:        "Initialize",
 		Description: "Initialize project with CLAUDE.md",
@@ -239,7 +239,7 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 	}
 	registry.RegisterTopic(authTopic)
 
-	registry.RegisterVerb("auth", &Verb{
+	registry.RegisterCommand("auth", &HierCommand{
 		ID:          "login",
 		Name:        "Login",
 		Description: "Login to provider",
@@ -249,7 +249,7 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 		MaxArgs:     1,
 	})
 
-	registry.RegisterVerb("auth", &Verb{
+	registry.RegisterCommand("auth", &HierCommand{
 		ID:          "logout",
 		Name:        "Logout",
 		Description: "Logout from provider",
@@ -259,7 +259,7 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 		MaxArgs:     1,
 	})
 
-	registry.RegisterVerb("auth", &Verb{
+	registry.RegisterCommand("auth", &HierCommand{
 		ID:          "status",
 		Name:        "Status",
 		Description: "Show authentication status",
@@ -277,7 +277,7 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 	}
 	registry.RegisterTopic(systemTopic)
 
-	registry.RegisterVerb("system", &Verb{
+	registry.RegisterCommand("system", &HierCommand{
 		ID:          "help",
 		Name:        "Help",
 		Description: "Show help information",
@@ -286,7 +286,7 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 		MaxArgs:     1,
 	})
 
-	registry.RegisterVerb("system", &Verb{
+	registry.RegisterCommand("system", &HierCommand{
 		ID:          "exit",
 		Name:        "Exit",
 		Description: "Exit application",
@@ -301,8 +301,8 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 		Name:        "Help",
 		Description: "Show help information",
 		Icon:        "❓",
-		Verbs: map[string]*Verb{
-			"": { // Empty verb for just "/help"
+		Commands: map[string]*HierCommand{
+			"": { // Empty command for just "/help"
 				ID:      "",
 				Name:    "General Help",
 				Handler: handleHierHelp,

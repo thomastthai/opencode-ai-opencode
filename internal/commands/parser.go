@@ -11,7 +11,7 @@ import (
 type SlashCommand struct {
 	Raw        string   // Original input (e.g., "/session new my-session")
 	Topic      string   // The topic/subject (e.g., "session")
-	Verb       string   // The action/verb (e.g., "new")
+	Command    string   // The command (e.g., "new")
 	Args       []string // Additional arguments (e.g., ["my-session"])
 	Incomplete bool     // Whether the command is still being typed
 }
@@ -21,7 +21,7 @@ type ParseState int
 
 const (
 	ParseStateTopic ParseState = iota // User is selecting/typing topic
-	ParseStateVerb                    // User is selecting/typing verb
+	ParseStateCommand                 // User is selecting/typing command
 	ParseStateArgs                    // User is typing arguments
 )
 
@@ -80,9 +80,9 @@ func (p *CommandParser) Parse(input string) SlashCommand {
 	// First part is the topic
 	result.Topic = parts[0]
 
-	// Check if we have a verb
+	// Check if we have a command
 	if len(parts) > 1 {
-		result.Verb = parts[1]
+		result.Command = parts[1]
 		
 		// Remaining parts are arguments
 		if len(parts) > 2 {
@@ -98,11 +98,11 @@ func (p *CommandParser) Parse(input string) SlashCommand {
 
 // GetParseState determines what phase of parsing we're in
 func (p *CommandParser) GetParseState(parsed SlashCommand) ParseState {
-	if parsed.Topic == "" || (!strings.HasSuffix(parsed.Raw, " ") && parsed.Verb == "") {
+	if parsed.Topic == "" || (!strings.HasSuffix(parsed.Raw, " ") && parsed.Command == "") {
 		return ParseStateTopic
 	}
-	if parsed.Verb == "" || (!strings.HasSuffix(parsed.Raw, " ") && len(parsed.Args) == 0) {
-		return ParseStateVerb
+	if parsed.Command == "" || (!strings.HasSuffix(parsed.Raw, " ") && len(parsed.Args) == 0) {
+		return ParseStateCommand
 	}
 	return ParseStateArgs
 }
@@ -114,10 +114,10 @@ func (p *CommandParser) GetCompletions(parsed SlashCommand) []CommandCompletion 
 	switch state {
 	case ParseStateTopic:
 		return p.getTopicCompletions(parsed.Topic)
-	case ParseStateVerb:
-		return p.getVerbCompletions(parsed.Topic, parsed.Verb)
+	case ParseStateCommand:
+		return p.getCommandCompletions(parsed.Topic, parsed.Command)
 	case ParseStateArgs:
-		return p.getArgCompletions(parsed.Topic, parsed.Verb, parsed.Args)
+		return p.getArgCompletions(parsed.Topic, parsed.Command, parsed.Args)
 	}
 	
 	return nil
@@ -162,36 +162,36 @@ func (p *CommandParser) getTopicCompletions(partial string) []CommandCompletion 
 	return completions
 }
 
-// getVerbCompletions returns completions for verbs based on topic
-func (p *CommandParser) getVerbCompletions(topic, partial string) []CommandCompletion {
+// getCommandCompletions returns completions for commands based on topic
+func (p *CommandParser) getCommandCompletions(topic, partial string) []CommandCompletion {
 	topicObj, exists := p.hierarchicalReg.GetTopic(topic)
 	if !exists {
 		return nil
 	}
 	
-	completions := make([]CommandCompletion, 0, len(topicObj.Verbs))
+	completions := make([]CommandCompletion, 0, len(topicObj.Commands))
 	
-	for _, verb := range topicObj.Verbs {
-		// Skip empty verb (used for special cases like /help)
-		if verb.ID == "" && topic != "help" {
+	for _, command := range topicObj.Commands {
+		// Skip empty command (used for special cases like /help)
+		if command.ID == "" && topic != "help" {
 			continue
 		}
 		
 		// Filter by partial match if provided
-		if partial != "" && !strings.HasPrefix(verb.ID, strings.ToLower(partial)) {
+		if partial != "" && !strings.HasPrefix(command.ID, strings.ToLower(partial)) {
 			continue
 		}
 		
 		completion := CommandCompletion{
-			Value:       verb.ID,
-			Display:     verb.Name,
-			Description: verb.Description,
-			Complete:    fmt.Sprintf("/%s %s ", topic, verb.ID),
+			Value:       command.ID,
+			Display:     command.Name,
+			Description: command.Description,
+			Complete:    fmt.Sprintf("/%s %s ", topic, command.ID),
 		}
 		
 		// Add args help if available
-		if verb.ArgsHelp != "" {
-			completion.Description += " " + verb.ArgsHelp
+		if command.ArgsHelp != "" {
+			completion.Description += " " + command.ArgsHelp
 		}
 		
 		completions = append(completions, completion)
@@ -201,10 +201,10 @@ func (p *CommandParser) getVerbCompletions(topic, partial string) []CommandCompl
 }
 
 // getArgCompletions returns completions for arguments
-func (p *CommandParser) getArgCompletions(topic, verb string, args []string) []CommandCompletion {
+func (p *CommandParser) getArgCompletions(topic, command string, args []string) []CommandCompletion {
 	// Use dynamic completions if app context is available
 	if p.app != nil {
-		return GetDynamicCompletions(topic, verb, args, p.app)
+		return GetDynamicCompletions(topic, command, args, p.app)
 	}
 	
 	// Return empty to indicate free-form input
@@ -236,10 +236,10 @@ func (p *CommandParser) GetTabCompletion(input string) (string, []CommandComplet
 				return "/" + prefix, completions
 			}
 		}
-	case ParseStateVerb:
-		if parsed.Verb != "" {
-			prefix := p.findCommonPrefix(completions, parsed.Verb)
-			if prefix != parsed.Verb {
+	case ParseStateCommand:
+		if parsed.Command != "" {
+			prefix := p.findCommonPrefix(completions, parsed.Command)
+			if prefix != parsed.Command {
 				return "/" + parsed.Topic + " " + prefix, completions
 			}
 		}
@@ -289,17 +289,17 @@ func commonPrefix(a, b string) string {
 // CanExecute checks if a slash command is complete and can be executed
 func (p *CommandParser) CanExecute(cmd SlashCommand) bool {
 	// Special case for help
-	if cmd.Topic == "help" && cmd.Verb == "" {
+	if cmd.Topic == "help" && cmd.Command == "" {
 		return true
 	}
 	
-	// Normal commands need topic and verb
-	if cmd.Topic == "" || cmd.Verb == "" {
+	// Normal commands need topic and command
+	if cmd.Topic == "" || cmd.Command == "" {
 		return false
 	}
 	
 	// Check if the command exists
-	_, exists := p.hierarchicalReg.GetVerb(cmd.Topic, cmd.Verb)
+	_, exists := p.hierarchicalReg.GetCommand(cmd.Topic, cmd.Command)
 	return exists
 }
 

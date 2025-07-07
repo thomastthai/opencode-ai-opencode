@@ -20,7 +20,7 @@ func TestCommandParser_Parse(t *testing.T) {
 			expected: SlashCommand{
 				Raw:        "/",
 				Topic:      "",
-				Verb:       "",
+				Command:       "",
 				Args:       nil,
 				Incomplete: true,
 			},
@@ -31,7 +31,7 @@ func TestCommandParser_Parse(t *testing.T) {
 			expected: SlashCommand{
 				Raw:        "/session",
 				Topic:      "session",
-				Verb:       "",
+				Command:       "",
 				Args:       nil,
 				Incomplete: true,
 			},
@@ -42,29 +42,29 @@ func TestCommandParser_Parse(t *testing.T) {
 			expected: SlashCommand{
 				Raw:        "/session ",
 				Topic:      "session",
-				Verb:       "",
+				Command:       "",
 				Args:       nil,
 				Incomplete: true,
 			},
 		},
 		{
-			name:  "topic and verb without space",
+			name:  "topic and command without space",
 			input: "/session new",
 			expected: SlashCommand{
 				Raw:        "/session new",
 				Topic:      "session",
-				Verb:       "new",
+				Command:       "new",
 				Args:       nil,
 				Incomplete: true,
 			},
 		},
 		{
-			name:  "topic and verb with space",
+			name:  "topic and command with space",
 			input: "/session new ",
 			expected: SlashCommand{
 				Raw:        "/session new ",
 				Topic:      "session",
-				Verb:       "new",
+				Command:       "new",
 				Args:       nil,
 				Incomplete: false,
 			},
@@ -75,7 +75,7 @@ func TestCommandParser_Parse(t *testing.T) {
 			expected: SlashCommand{
 				Raw:        "/session new my-session",
 				Topic:      "session",
-				Verb:       "new",
+				Command:       "new",
 				Args:       []string{"my-session"},
 				Incomplete: true,
 			},
@@ -86,7 +86,7 @@ func TestCommandParser_Parse(t *testing.T) {
 			expected: SlashCommand{
 				Raw:        "/session compact focus on errors",
 				Topic:      "session",
-				Verb:       "compact",
+				Command:       "compact",
 				Args:       []string{"focus", "on", "errors"},
 				Incomplete: true,
 			},
@@ -97,7 +97,7 @@ func TestCommandParser_Parse(t *testing.T) {
 			expected: SlashCommand{
 				Raw:        "session new",
 				Topic:      "",
-				Verb:       "",
+				Command:       "",
 				Args:       nil,
 				Incomplete: true,
 			},
@@ -133,12 +133,12 @@ func TestCommandParser_GetParseState(t *testing.T) {
 		{
 			name:     "topic with space",
 			input:    "/session ",
-			expected: ParseStateVerb,
+			expected: ParseStateCommand,
 		},
 		{
 			name:     "typing verb",
 			input:    "/session ne",
-			expected: ParseStateVerb,
+			expected: ParseStateCommand,
 		},
 		{
 			name:     "verb with space",
@@ -355,9 +355,9 @@ func TestCommandParser_StateTransitions(t *testing.T) {
 			ParseStateTopic,
 			ParseStateTopic,
 			ParseStateTopic,
-			ParseStateVerb,
-			ParseStateVerb,
-			ParseStateVerb,
+			ParseStateCommand,
+			ParseStateCommand,
+			ParseStateCommand,
 			ParseStateArgs,
 			ParseStateArgs,
 		}
@@ -377,7 +377,7 @@ func TestCommandParser_StateTransitions(t *testing.T) {
 			
 			// For non-arg states, we should have completions unless it's an unknown command
 			if parsed.Topic == "" || (state == ParseStateTopic && len(parsed.Topic) > 0) ||
-			   (state == ParseStateVerb && parser.isValidTopic(parsed.Topic)) {
+			   (state == ParseStateCommand && parser.isValidTopic(parsed.Topic)) {
 				assert.NotNil(t, completions, 
 					"Should have completions for input: %s", input)
 			}

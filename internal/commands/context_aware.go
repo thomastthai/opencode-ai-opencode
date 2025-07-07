@@ -150,19 +150,19 @@ func (c *ContextProvider) GetProviderCompletions() []CommandCompletion {
 }
 
 // GetDynamicCompletions returns context-aware completions for specific commands
-func GetDynamicCompletions(topic, verb string, args []string, app *app.App) []CommandCompletion {
+func GetDynamicCompletions(topic, command string, args []string, app *app.App) []CommandCompletion {
 	provider := NewContextProvider(app)
 
 	// Handle different command contexts
 	switch topic {
 	case "session":
-		switch verb {
+		switch command {
 		case "switch", "show", "delete":
 			return provider.GetSessionCompletions()
 		}
 		
 	case "config":
-		switch verb {
+		switch command {
 		case "model":
 			if len(args) == 0 {
 				return provider.GetModelCompletions()
@@ -170,7 +170,7 @@ func GetDynamicCompletions(topic, verb string, args []string, app *app.App) []Co
 		}
 		
 	case "auth":
-		switch verb {
+		switch command {
 		case "login", "logout":
 			if len(args) == 0 {
 				return provider.GetProviderCompletions()
@@ -178,7 +178,7 @@ func GetDynamicCompletions(topic, verb string, args []string, app *app.App) []Co
 		}
 		
 	case "project":
-		switch verb {
+		switch command {
 		case "add-dir":
 			prefix := ""
 			if len(args) > 0 {

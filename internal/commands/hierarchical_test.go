@@ -32,7 +32,7 @@ func TestHierarchicalRegistry(t *testing.T) {
 		assert.False(t, exists)
 	})
 	
-	t.Run("register and retrieve verbs", func(t *testing.T) {
+	t.Run("register and retrieve commands", func(t *testing.T) {
 		registry := NewHierarchicalRegistry()
 		
 		// Register topic first
@@ -42,29 +42,29 @@ func TestHierarchicalRegistry(t *testing.T) {
 		}
 		registry.RegisterTopic(topic)
 		
-		// Register verb
-		verb := &Verb{
+		// Register command
+		command := &HierCommand{
 			ID:          "run",
 			Name:        "Run",
 			Description: "Run test",
 			MinArgs:     0,
 			MaxArgs:     1,
 		}
-		err := registry.RegisterVerb("test", verb)
+		err := registry.RegisterCommand("test", command)
 		assert.NoError(t, err)
 		
-		// Retrieve verb
-		retrieved, exists := registry.GetVerb("test", "run")
+		// Retrieve command
+		retrieved, exists := registry.GetCommand("test", "run")
 		assert.True(t, exists)
 		assert.Equal(t, "run", retrieved.ID)
 		assert.Equal(t, "Run", retrieved.Name)
 		
-		// Non-existent verb
-		_, exists = registry.GetVerb("test", "nonexistent")
+		// Non-existent command
+		_, exists = registry.GetCommand("test", "nonexistent")
 		assert.False(t, exists)
 		
 		// Verb in non-existent topic
-		_, exists = registry.GetVerb("nonexistent", "run")
+		_, exists = registry.GetCommand("nonexistent", "run")
 		assert.False(t, exists)
 	})
 	
@@ -81,18 +81,18 @@ func TestHierarchicalRegistry(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "already registered")
 		
-		// Register verb
-		verb := &Verb{ID: "run", Name: "Run"}
-		err = registry.RegisterVerb("test", verb)
+		// Register command
+		command := &HierCommand{ID: "run", Name: "Run"}
+		err = registry.RegisterCommand("test", command)
 		assert.NoError(t, err)
 		
 		// Duplicate verb
-		err = registry.RegisterVerb("test", verb)
+		err = registry.RegisterCommand("test", command)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "already registered")
 		
 		// Verb in non-existent topic
-		err = registry.RegisterVerb("nonexistent", verb)
+		err = registry.RegisterCommand("nonexistent", command)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "not found")
 	})
@@ -129,18 +129,18 @@ func TestHierarchicalRegistry(t *testing.T) {
 	t.Run("get completions for topic", func(t *testing.T) {
 		registry := NewHierarchicalRegistry()
 		
-		// Set up topic with verbs
+		// Set up topic with commands
 		topic := &Topic{ID: "test", Name: "Test"}
 		registry.RegisterTopic(topic)
 		
-		verbs := []*Verb{
+		commands := []*HierCommand{
 			{ID: "run", Name: "Run", Description: "Run test"},
 			{ID: "stop", Name: "Stop", Description: "Stop test"},
 			{ID: "status", Name: "Status", Description: "Show status"},
 		}
 		
-		for _, verb := range verbs {
-			registry.RegisterVerb("test", verb)
+		for _, command := range commands {
+			registry.RegisterCommand("test", command)
 		}
 		
 		// Get completions
@@ -170,7 +170,7 @@ func TestHierarchicalRegistry(t *testing.T) {
 		topic := &Topic{ID: "test", Name: "Test"}
 		registry.RegisterTopic(topic)
 		
-		verb := &Verb{
+		command := &HierCommand{
 			ID:      "run",
 			Name:    "Run",
 			MinArgs: 1,
@@ -181,13 +181,13 @@ func TestHierarchicalRegistry(t *testing.T) {
 				return nil
 			},
 		}
-		registry.RegisterVerb("test", verb)
+		registry.RegisterCommand("test", command)
 		
 		// Execute valid command
 		cmd := SlashCommand{
 			Raw:   "/test run arg1 arg2",
 			Topic: "test",
-			Verb:  "run",
+			Command:  "run",
 			Args:  []string{"arg1", "arg2"},
 		}
 		
@@ -211,7 +211,7 @@ func TestHierarchicalRegistry(t *testing.T) {
 		// Non-existent command
 		cmd = SlashCommand{
 			Topic: "nonexistent",
-			Verb:  "command",
+			Command:  "command",
 		}
 		err = registry.Execute(context.Background(), cmd)
 		assert.Error(t, err)
@@ -238,15 +238,15 @@ func TestInitializeBuiltinCommands(t *testing.T) {
 	}
 	
 	// Check some specific verbs
-	verb, exists := registry.GetVerb("session", "new")
+	verb, exists := registry.GetCommand("session", "new")
 	assert.True(t, exists)
 	assert.Equal(t, "New", verb.Name)
 	
-	verb, exists = registry.GetVerb("auth", "login")
+	verb, exists = registry.GetCommand("auth", "login")
 	assert.True(t, exists)
 	assert.Equal(t, 1, verb.MinArgs, "Login should require provider argument")
 	
-	verb, exists = registry.GetVerb("system", "help")
+	verb, exists = registry.GetCommand("system", "help")
 	assert.True(t, exists)
 	assert.NotNil(t, verb.Handler)
 }
