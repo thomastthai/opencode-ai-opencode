@@ -1,6 +1,7 @@
 package completions
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,8 +47,18 @@ func TestSlashCommandProvider_ContextAware(t *testing.T) {
 		items, err := provider.GetChildEntries("/auth login ")
 		assert.NoError(t, err)
 		
-		// Should have no completions (no dynamic args without app)
-		assert.Len(t, items, 0, "Should have no completions without app context")
+		// Should have option completions (--force, --no-browser) even without app context
+		assert.Greater(t, len(items), 0, "Should have option completions")
+		
+		// Verify we have option completions
+		hasOptions := false
+		for _, item := range items {
+			if strings.HasPrefix(item.GetValue(), "--") {
+				hasOptions = true
+				break
+			}
+		}
+		assert.True(t, hasOptions, "Should have option completions")
 	})
 	
 	t.Run("config model completions", func(t *testing.T) {

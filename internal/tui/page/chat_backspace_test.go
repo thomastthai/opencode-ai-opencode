@@ -50,7 +50,7 @@ func TestChatPage_BackspaceToSlashShowsCommands(t *testing.T) {
 	p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
 	
 	assert.True(t, p.showCompletionDialog, "Dialog should be visible with /list")
-	assert.Equal(t, "commands", p.completionDialog.GetId())
+	assert.Equal(t, "slash-commands", p.completionDialog.GetId())
 
 	// Step 2: Backspace to just "/"
 	// Don't set the value directly, let the completion dialog handle the backspaces
@@ -69,7 +69,7 @@ func TestChatPage_BackspaceToSlashShowsCommands(t *testing.T) {
 
 	// Step 3: Verify dialog is still showing and has commands
 	assert.True(t, p.showCompletionDialog, "Dialog should still be visible with just /")
-	assert.Equal(t, "commands", p.completionDialog.GetId())
+	assert.Equal(t, "slash-commands", p.completionDialog.GetId())
 	
 	// The key check: verify commands are shown, not "No commands found"
 	items := p.completionDialog.GetListItems()
@@ -77,7 +77,7 @@ func TestChatPage_BackspaceToSlashShowsCommands(t *testing.T) {
 	
 	// Also check the view doesn't show "No commands found"
 	view := p.completionDialog.View()
-	assert.NotContains(t, view, "No commands found", "Should not show 'No commands found' when / is typed")
+	assert.NotContains(t, view, "No command matches found", "Should not show 'No command matches found' when / is typed")
 }
 
 func TestChatPage_BackspaceScenarios(t *testing.T) {

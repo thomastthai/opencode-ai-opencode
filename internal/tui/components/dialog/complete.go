@@ -112,6 +112,8 @@ func (c *completionDialogCmp) SetProvider(provider CompletionProvider) {
 		emptyMsg = "No commands found"
 	} else if provider.GetId() == "files" {
 		emptyMsg = "No file matches found"
+	} else if provider.GetId() == "slash-commands" {
+		emptyMsg = "No command matches found"
 	}
 	// Update the list with new provider's items
 	items, err := provider.GetChildEntries("")

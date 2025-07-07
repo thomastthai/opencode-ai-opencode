@@ -52,8 +52,16 @@ func (p *slashCommandProvider) GetChildEntries(query string) ([]dialog.Completio
 	// Store the query for later use
 	p.currentQuery = query
 	
+	// The query might come with or without the leading slash
+	// In the UI, it comes without (stripped by complete.go)
+	// In tests, it comes with the slash
+	fullQuery := query
+	if !strings.HasPrefix(query, "/") {
+		fullQuery = "/" + query
+	}
+	
 	// Parse the current input
-	parsed := p.parser.Parse(query)
+	parsed := p.parser.Parse(fullQuery)
 	completions := p.parser.GetCompletions(parsed)
 	
 	items := make([]dialog.CompletionItemI, len(completions))

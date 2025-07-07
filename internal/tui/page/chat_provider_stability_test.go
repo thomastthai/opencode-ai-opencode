@@ -44,14 +44,14 @@ func TestChatPage_CompletionProviderStability(t *testing.T) {
 	p.editor.SetValue("/")
 	p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	assert.True(t, p.showCompletionDialog)
-	assert.Equal(t, "commands", p.completionDialog.GetId())
+	assert.Equal(t, "slash-commands", p.completionDialog.GetId())
 
 	// Simulate multiple updates (like what happens during continuous scrolling)
 	// This should NOT cause the provider to be reset each time
 	for i := 0; i < 10; i++ {
 		p.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 		// Verify that the provider hasn't changed
-		assert.Equal(t, "commands", p.completionDialog.GetId(), "Provider should not change on window resize")
+		assert.Equal(t, "slash-commands", p.completionDialog.GetId(), "Provider should not change on window resize")
 		assert.True(t, p.showCompletionDialog, "Dialog should remain visible")
 	}
 
@@ -62,7 +62,7 @@ func TestChatPage_CompletionProviderStability(t *testing.T) {
 		p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}) // Random update
 		p.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 		p.Update(tea.MouseMsg{Type: tea.MouseMotion})
-		assert.Equal(t, "commands", p.completionDialog.GetId(), "Provider should remain 'commands'")
+		assert.Equal(t, "slash-commands", p.completionDialog.GetId(), "Provider should remain 'slash-commands'")
 		assert.True(t, p.showCompletionDialog, "Dialog should remain visible")
 	}
 
@@ -109,7 +109,7 @@ func TestChatPage_NoInfiniteLoopOnContinuousTyping(t *testing.T) {
 	p.editor.SetValue("/")
 	p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	initialProvider := p.completionDialog.GetId()
-	assert.Equal(t, "commands", initialProvider)
+	assert.Equal(t, "slash-commands", initialProvider)
 
 	// Type "list" character by character, simulating real typing
 	chars := []rune{'l', 'i', 's', 't'}
@@ -122,12 +122,12 @@ func TestChatPage_NoInfiniteLoopOnContinuousTyping(t *testing.T) {
 		for j := 0; j < 3; j++ {
 			p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{char}})
 			// Provider should remain the same, not be reset
-			assert.Equal(t, "commands", p.completionDialog.GetId(), 
+			assert.Equal(t, "slash-commands", p.completionDialog.GetId(), 
 				"Provider should not change while typing after /")
 		}
 	}
 
 	// Verify dialog is still showing and provider hasn't changed
 	assert.True(t, p.showCompletionDialog, "Dialog should remain visible")
-	assert.Equal(t, "commands", p.completionDialog.GetId(), "Provider should still be commands")
+	assert.Equal(t, "slash-commands", p.completionDialog.GetId(), "Provider should still be slash-commands")
 }

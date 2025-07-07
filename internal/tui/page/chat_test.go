@@ -49,9 +49,9 @@ func TestChatPage_Completion(t *testing.T) {
 	p.editor.SetValue("/")
 	p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	assert.True(t, p.showCompletionDialog, "Dialog should be visible after typing '/'")
-	assert.Equal(t, "commands", p.completionDialog.GetId(), "Provider should be 'commands'")
+	assert.Equal(t, "slash-commands", p.completionDialog.GetId(), "Provider should be 'slash-commands'")
 	// Verify empty message is correct for commands (this is the key check)
-	assert.Equal(t, "No commands found", p.completionDialog.GetEmptyMessage(), "Empty message should be for commands")
+	assert.Equal(t, "No command matches found", p.completionDialog.GetEmptyMessage(), "Empty message should be for commands")
 	// Note: We may not have command items in test environment, but the message should be correct
 
 	// --- Test Case 3: Typing '@' shows file completion ---
@@ -82,9 +82,9 @@ func TestChatPage_Completion(t *testing.T) {
 	p.editor.SetValue("/")
 	p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	assert.True(t, p.showCompletionDialog, "Dialog should be visible after re-typing '/'")
-	assert.Equal(t, "commands", p.completionDialog.GetId(), "Provider should be 'commands'")
+	assert.Equal(t, "slash-commands", p.completionDialog.GetId(), "Provider should be 'slash-commands'")
 	// THIS CHECK WOULD HAVE CAUGHT THE BUG - verify the empty message is correct
-	assert.Equal(t, "No commands found", p.completionDialog.GetEmptyMessage(), "Empty message should be for commands after re-typing '/'")
+	assert.Equal(t, "No command matches found", p.completionDialog.GetEmptyMessage(), "Empty message should be for commands after re-typing '/'")
 	// The bug was that it showed "No file matches found" instead of "No commands found"
 
 	// --- Test Case 6: Multiple backspaces and re-typing should still work ---
@@ -148,7 +148,7 @@ func TestChatPage_CompletionViewOutput(t *testing.T) {
 	
 	// The View() should contain the empty message
 	view := p.completionDialog.View()
-	assert.Contains(t, view, "No commands found", "View should display 'No commands found' when no commands match")
+	assert.Contains(t, view, "No command matches found", "View should display 'No command matches found' when no commands match")
 	
 	// Switch to file completion with no matches
 	p.editor.SetValue("@nonexistentfile")
