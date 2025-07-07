@@ -103,7 +103,7 @@ func (p *CommandParser) Parse(input string) SlashCommand {
 						result.Options = parsedOpts
 						result.Args = parsedOpts.GetPositional()
 					} else {
-						// If parsing fails, treat all as positional args
+						// If parsing fails, still keep track of args for completion
 						result.Args = remainingArgs
 					}
 				} else {
@@ -125,12 +125,18 @@ func (p *CommandParser) Parse(input string) SlashCommand {
 
 // GetParseState determines what phase of parsing we're in
 func (p *CommandParser) GetParseState(parsed SlashCommand) ParseState {
+	// If no topic or typing topic
 	if parsed.Topic == "" || (!strings.HasSuffix(parsed.Raw, " ") && parsed.Command == "") {
 		return ParseStateTopic
 	}
-	if parsed.Command == "" || (!strings.HasSuffix(parsed.Raw, " ") && len(parsed.Args) == 0) {
+	
+	// If we have a topic but no command, or typing command
+	if parsed.Command == "" {
 		return ParseStateCommand
 	}
+	
+	// If we have both topic and command, we're in args state
+	// This includes option parsing
 	return ParseStateArgs
 }
 
@@ -144,6 +150,14 @@ func (p *CommandParser) GetCompletions(parsed SlashCommand) []CommandCompletion 
 	case ParseStateCommand:
 		return p.getCommandCompletions(parsed.Topic, parsed.Command)
 	case ParseStateArgs:
+		// Check if the command actually exists
+		if _, exists := p.hierarchicalReg.GetCommand(parsed.Topic, parsed.Command); !exists {
+			// Command doesn't exist, so this might be a partial command
+			// If not ending with space, treat as command completion
+			if !strings.HasSuffix(parsed.Raw, " ") {
+				return p.getCommandCompletions(parsed.Topic, parsed.Command)
+			}
+		}
 		return p.getArgCompletions(parsed.Topic, parsed.Command, parsed.Args)
 	}
 	
@@ -231,13 +245,16 @@ func (p *CommandParser) getCommandCompletions(topic, partial string) []CommandCo
 func (p *CommandParser) getArgCompletions(topic, command string, args []string) []CommandCompletion {
 	completions := []CommandCompletion{}
 	
+	// Build the command prefix for option completions
+	commandPrefix := fmt.Sprintf("/%s %s", topic, command)
+	
 	// Check if the last argument looks like an option prefix
 	if len(args) > 0 {
 		lastArg := args[len(args)-1]
 		if strings.HasPrefix(lastArg, "-") {
 			// Get option completions
 			options := p.hierarchicalReg.GetAllOptions(topic, command)
-			return p.getOptionCompletions(lastArg, options)
+			return p.getOptionCompletions(lastArg, options, commandPrefix, args[:len(args)-1])
 		}
 	}
 	
@@ -249,14 +266,14 @@ func (p *CommandParser) getArgCompletions(topic, command string, args []string) 
 	
 	// Also add option completions with -- prefix
 	options := p.hierarchicalReg.GetAllOptions(topic, command)
-	optionCompletions := p.getAllOptionCompletions(options)
+	optionCompletions := p.getAllOptionCompletions(options, commandPrefix, args)
 	completions = append(completions, optionCompletions...)
 	
 	return completions
 }
 
 // getOptionCompletions returns completions for options based on prefix
-func (p *CommandParser) getOptionCompletions(prefix string, options []*Option) []CommandCompletion {
+func (p *CommandParser) getOptionCompletions(prefix string, options []*Option, commandPrefix string, existingArgs []string) []CommandCompletion {
 	completions := []CommandCompletion{}
 	
 	// Determine if it's long or short option
@@ -266,6 +283,12 @@ func (p *CommandParser) getOptionCompletions(prefix string, options []*Option) [
 	// Build a map to avoid duplicates
 	seen := make(map[string]bool)
 	
+	// Build the base command with existing args
+	baseCommand := commandPrefix
+	if len(existingArgs) > 0 {
+		baseCommand += " " + strings.Join(existingArgs, " ")
+	}
+	
 	for _, opt := range options {
 		if opt.Hidden {
 			continue
@@ -274,11 +297,12 @@ func (p *CommandParser) getOptionCompletions(prefix string, options []*Option) [
 		// Check long option
 		if (isLong || prefix == "-") && strings.HasPrefix(opt.Name, searchPrefix) {
 			if !seen[opt.Name] {
+				optionText := "--" + opt.Name
 				completions = append(completions, CommandCompletion{
-					Value:       "--" + opt.Name,
+					Value:       optionText,
 					Display:     FormatOptionName(opt),
 					Description: opt.Description,
-					Complete:    "--" + opt.Name,
+					Complete:    baseCommand + " " + optionText + " ",
 				})
 				seen[opt.Name] = true
 			}
@@ -287,11 +311,12 @@ func (p *CommandParser) getOptionCompletions(prefix string, options []*Option) [
 		// Check short option
 		if !isLong && opt.ShortName != "" && strings.HasPrefix(opt.ShortName, searchPrefix) {
 			if !seen[opt.ShortName] {
+				optionText := "-" + opt.ShortName
 				completions = append(completions, CommandCompletion{
-					Value:       "-" + opt.ShortName,
+					Value:       optionText,
 					Display:     FormatOptionName(opt),
 					Description: opt.Description,
-					Complete:    "-" + opt.ShortName,
+					Complete:    baseCommand + " " + optionText + " ",
 				})
 				seen[opt.ShortName] = true
 			}
@@ -302,22 +327,29 @@ func (p *CommandParser) getOptionCompletions(prefix string, options []*Option) [
 }
 
 // getAllOptionCompletions returns all available option completions
-func (p *CommandParser) getAllOptionCompletions(options []*Option) []CommandCompletion {
+func (p *CommandParser) getAllOptionCompletions(options []*Option, commandPrefix string, existingArgs []string) []CommandCompletion {
 	completions := []CommandCompletion{}
 	
 	// Build a map to avoid duplicates
 	seen := make(map[string]bool)
+	
+	// Build the base command with existing args
+	baseCommand := commandPrefix
+	if len(existingArgs) > 0 {
+		baseCommand += " " + strings.Join(existingArgs, " ")
+	}
 	
 	for _, opt := range options {
 		if opt.Hidden || seen[opt.Name] {
 			continue
 		}
 		
+		optionText := "--" + opt.Name
 		completions = append(completions, CommandCompletion{
-			Value:       "--" + opt.Name,
+			Value:       optionText,
 			Display:     FormatOptionName(opt),
 			Description: opt.Description,
-			Complete:    "--" + opt.Name,
+			Complete:    baseCommand + " " + optionText + " ",
 		})
 		seen[opt.Name] = true
 	}

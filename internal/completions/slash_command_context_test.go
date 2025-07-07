@@ -53,7 +53,8 @@ func TestSlashCommandProvider_ContextAware(t *testing.T) {
 		// Verify we have option completions
 		hasOptions := false
 		for _, item := range items {
-			if strings.HasPrefix(item.GetValue(), "--") {
+			// Check if the complete value includes an option
+			if strings.Contains(item.GetValue(), " --") || strings.Contains(item.GetValue(), " -") {
 				hasOptions = true
 				break
 			}

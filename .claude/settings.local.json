@@ -8,7 +8,11 @@
       "Bash(git commit:*)",
       "Bash(git checkout:*)",
       "Bash(git push:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(rg:*)",
+      "Bash(find:*)",
+      "Bash(go run:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }
