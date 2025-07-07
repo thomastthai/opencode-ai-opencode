@@ -2,6 +2,8 @@
 
 This document outlines testing best practices and patterns learned from real bugs in the codebase. LLMs and developers should follow these guidelines when creating or modifying tests.
 
+**Note**: For architecture patterns and coding principles that make code testable, see [ARCHITECTURE.md](./ARCHITECTURE.md).
+
 ## Core Testing Principles
 
 ### 1. Test User-Visible Behavior, Not Just Internal State
@@ -109,30 +111,14 @@ func TestEmptyStateMessages(t *testing.T) {
 }
 ```
 
-## Defensive Programming in Tests
+## Test Setup Best Practices
 
-### 1. Add Helper Methods for Testing
+### 1. Complete Test Initialization
 
-Add methods to your interfaces specifically for testing internal state:
-
-```go
-type CompletionDialog interface {
-    // Production methods
-    SetProvider(provider Provider)
-    View() string
-    
-    // Test helper methods
-    GetListItems() []Item        // For verifying items loaded
-    GetEmptyMessage() string      // For verifying correct message
-}
-```
-
-### 2. Use Factory Functions
-
-Create factory functions that ensure proper initialization:
+Always initialize test objects with all required dependencies:
 
 ```go
-// Instead of allowing partial initialization
+// Create a helper function for consistent test setup
 func NewTestApp() *App {
     return &App{
         Recovery: recovery.NewService(),
@@ -143,20 +129,23 @@ func NewTestApp() *App {
 }
 ```
 
-### 3. Validate State Transitions
+### 2. Add Test Helper Methods
 
-Add validation in your state transition methods:
+When testing internal state, add helper methods to your interfaces:
 
 ```go
-func (c *Component) SetProvider(provider Provider) {
-    if provider == nil {
-        panic("provider cannot be nil")
-    }
+type CompletionDialog interface {
+    // Production methods
+    SetProvider(provider Provider)
+    View() string
     
-    c.provider = provider
-    c.updateDependentState() // Ensure all related state is updated
+    // Test helper methods (clearly marked)
+    GetListItems() []Item        // For verifying items loaded
+    GetEmptyMessage() string      // For verifying correct message
 }
 ```
+
+These helpers should be minimal and only expose what's necessary for testing.
 
 ## Common Testing Patterns
 

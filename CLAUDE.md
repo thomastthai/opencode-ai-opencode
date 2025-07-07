@@ -31,6 +31,8 @@ go fmt ./...                            # Format code
 
 ## Architecture Overview
 
+**IMPORTANT**: Refer to [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed architecture patterns and coding principles that must be followed when writing code.
+
 OpenCode is a terminal-based AI assistant built with Go, featuring:
 
 - **cmd/**: CLI interface using Cobra framework
