@@ -207,6 +207,30 @@ func TestComponentIntegration(t *testing.T) {
 }
 ```
 
+### 4. The "Temporal Stability" Pattern
+
+Test that components remain stable under continuous updates:
+
+```go
+func TestTemporalStability(t *testing.T) {
+    component := NewComponent()
+    component.SetState(initialState)
+    
+    // Simulate continuous updates like in real TUI
+    for i := 0; i < 100; i++ {
+        component.Update(WindowSizeMsg{})
+        component.Update(MouseMoveMsg{})
+        component.Update(TickMsg{})
+    }
+    
+    // Verify state remains consistent
+    assert.Equal(t, initialState, component.GetState())
+    
+    // Verify no performance degradation
+    // (e.g., lists aren't reloaded unnecessarily)
+}
+```
+
 ## Testing Checklist
 
 When writing or reviewing tests, ensure:
@@ -217,6 +241,8 @@ When writing or reviewing tests, ensure:
 - [ ] Edge cases are tested (nil, empty, invalid inputs)
 - [ ] Integration points are tested, not just isolated units
 - [ ] The test would have caught known historical bugs
+- [ ] Multiple consecutive updates are tested (temporal stability)
+- [ ] Idempotent operations remain idempotent
 
 ## Anti-Patterns to Avoid
 
@@ -225,6 +251,8 @@ When writing or reviewing tests, ensure:
 3. **Testing implementation details** - Test behavior, not how it's implemented
 4. **Ignoring timing/concurrency** - Test concurrent operations when applicable
 5. **Not testing the actual user experience** - A green test suite doesn't mean the UX works
+6. **Single state transition testing** - Test multiple consecutive updates to catch temporal bugs
+7. **Missing idempotency tests** - Verify that repeated operations don't cause unwanted side effects
 
 ## Example: Complete Test for State Management
 

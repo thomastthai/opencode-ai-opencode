@@ -223,10 +223,16 @@ func (c *completionDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				return c, cmd
 			case key.Matches(msg, completionDialogKeys.Cancel):
-				// Only close on backspace when there are no characters left
-				if msg.String() != "backspace" || len(c.pseudoSearchTextArea.Value()) <= 0 {
-					return c, c.close()
+				// For backspace, check if we should close based on the current value
+				// The textarea has already processed the backspace at this point
+				if msg.String() == "backspace" {
+					// If after backspace we still have the trigger character, don't close
+					if len(c.pseudoSearchTextArea.Value()) > 0 {
+						return c, tea.Batch(cmds...)
+					}
 				}
+				// For other cancel keys (space, esc) or empty backspace, close
+				return c, c.close()
 			}
 
 			return c, tea.Batch(cmds...)
