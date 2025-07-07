@@ -1,5 +1,12 @@
-Use ARCHITECTURE.md for architecture patterns and coding principles that must be followed when writing code.
+# GEMINI.md
 
-Use GIT.md for information on how to use git commands.
+This file provides guidance to Gemini when working with code in this repository.
 
-Use TESTING.md for comprehensive testing guidelines, patterns, and lessons learned from production bugs when writing or modifying tests.
+For comprehensive instructions that apply to all AI assistants, see [AI.md](./ai-assistants/AI.md).
+
+## Gemini-Specific Notes
+
+- When using Gemini, follow all guidelines in AI.md
+- Pay special attention to the architecture and testing patterns referenced there
+- Use the defensive programming and state management principles from ARCHITECTURE.md
+

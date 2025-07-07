@@ -1036,7 +1036,7 @@ The OAuth credentials file should be a JSON file with this structure:
 - **Automatic Detection**: Works seamlessly once tokens are in place
 - **Backwards Compatible**: Existing API key setups continue to work
 
-For detailed information about generating OAuth tokens, see [GEMINI_OAUTH.md](GEMINI_OAUTH.md).
+For detailed information about generating OAuth tokens, see [GEMINI_OAUTH.md](docs/guides/GEMINI_OAUTH.md).
 
 ### Troubleshooting OAuth2
 
