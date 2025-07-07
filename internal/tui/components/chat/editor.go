@@ -125,6 +125,18 @@ func (m *EditorCmp) send() tea.Cmd {
 	}
 
 	value := m.textarea.Value()
+	
+	// Check if this is a slash command
+	if strings.HasPrefix(strings.TrimSpace(value), "/") {
+		m.textarea.Reset()
+		m.attachments = nil
+		
+		// Send slash command execute message
+		return util.CmdHandler(dialog.SlashCommandExecuteMsg{
+			Raw: value,
+		})
+	}
+	
 	m.textarea.Reset()
 	attachments := m.attachments
 
@@ -150,6 +162,17 @@ func (m *EditorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		modifiedValue := strings.Replace(existingValue, msg.SearchString, msg.CompletionValue, 1)
 
 		m.textarea.SetValue(modifiedValue)
+		return m, nil
+	case dialog.SlashCommandCompleteMsg:
+		// Handle progressive slash command completion
+		m.textarea.SetValue(msg.NewValue)
+		m.textarea.SetCursor(msg.CursorPos)
+		
+		// If dialog should stay open, trigger an update to refresh completions
+		if msg.KeepOpen {
+			// The chat page will keep the dialog open and update completions
+			return m, nil
+		}
 		return m, nil
 	case SessionSelectedMsg:
 		if msg.ID != m.session.ID {

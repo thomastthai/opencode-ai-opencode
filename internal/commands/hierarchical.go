@@ -1,0 +1,383 @@
+package commands
+
+import (
+	"context"
+	"fmt"
+	"strings"
+)
+
+// Topic represents a command topic (e.g., session, config, auth)
+type Topic struct {
+	ID          string
+	Name        string
+	Description string
+	Icon        string
+	Verbs       map[string]*Verb
+}
+
+// Verb represents an action within a topic (e.g., new, list, delete)
+type Verb struct {
+	ID          string
+	Name        string
+	Description string
+	Handler     CommandHandler
+	ArgsHelp    string // Help text for arguments
+	MinArgs     int
+	MaxArgs     int
+}
+
+// HierarchicalRegistry manages commands in a topic/verb structure
+type HierarchicalRegistry struct {
+	topics map[string]*Topic
+}
+
+// NewHierarchicalRegistry creates a new hierarchical command registry
+func NewHierarchicalRegistry() *HierarchicalRegistry {
+	return &HierarchicalRegistry{
+		topics: make(map[string]*Topic),
+	}
+}
+
+// RegisterTopic registers a new topic
+func (r *HierarchicalRegistry) RegisterTopic(topic *Topic) error {
+	if _, exists := r.topics[topic.ID]; exists {
+		return fmt.Errorf("topic '%s' already registered", topic.ID)
+	}
+	if topic.Verbs == nil {
+		topic.Verbs = make(map[string]*Verb)
+	}
+	r.topics[topic.ID] = topic
+	return nil
+}
+
+// RegisterVerb registers a verb under a topic
+func (r *HierarchicalRegistry) RegisterVerb(topicID string, verb *Verb) error {
+	topic, exists := r.topics[topicID]
+	if !exists {
+		return fmt.Errorf("topic '%s' not found", topicID)
+	}
+	if _, exists := topic.Verbs[verb.ID]; exists {
+		return fmt.Errorf("verb '%s' already registered in topic '%s'", verb.ID, topicID)
+	}
+	topic.Verbs[verb.ID] = verb
+	return nil
+}
+
+// GetTopic retrieves a topic by ID
+func (r *HierarchicalRegistry) GetTopic(id string) (*Topic, bool) {
+	topic, exists := r.topics[id]
+	return topic, exists
+}
+
+// GetVerb retrieves a verb from a topic
+func (r *HierarchicalRegistry) GetVerb(topicID, verbID string) (*Verb, bool) {
+	topic, exists := r.topics[topicID]
+	if !exists {
+		return nil, false
+	}
+	verb, exists := topic.Verbs[verbID]
+	return verb, exists
+}
+
+// ListTopics returns all registered topics
+func (r *HierarchicalRegistry) ListTopics() []*Topic {
+	topics := make([]*Topic, 0, len(r.topics))
+	for _, topic := range r.topics {
+		topics = append(topics, topic)
+	}
+	return topics
+}
+
+// Execute runs a command based on parsed input
+func (r *HierarchicalRegistry) Execute(ctx context.Context, cmd SlashCommand) error {
+	verb, exists := r.GetVerb(cmd.Topic, cmd.Verb)
+	if !exists {
+		return fmt.Errorf("command not found: /%s %s", cmd.Topic, cmd.Verb)
+	}
+
+	// Validate args
+	if len(cmd.Args) < verb.MinArgs {
+		return fmt.Errorf("insufficient arguments: expected at least %d, got %d", verb.MinArgs, len(cmd.Args))
+	}
+	if verb.MaxArgs >= 0 && len(cmd.Args) > verb.MaxArgs {
+		return fmt.Errorf("too many arguments: expected at most %d, got %d", verb.MaxArgs, len(cmd.Args))
+	}
+
+	// Convert args to map for handler
+	args := map[string]interface{}{
+		"args": cmd.Args,
+		"raw":  cmd.Raw,
+	}
+
+	if verb.Handler == nil {
+		return fmt.Errorf("no handler for command: /%s %s", cmd.Topic, cmd.Verb)
+	}
+
+	return verb.Handler(ctx, args)
+}
+
+// GetCompletionsForTopic returns verb completions for a topic
+func (r *HierarchicalRegistry) GetCompletionsForTopic(topicID string) []CommandCompletion {
+	topic, exists := r.topics[topicID]
+	if !exists {
+		return nil
+	}
+
+	completions := make([]CommandCompletion, 0, len(topic.Verbs))
+	for _, verb := range topic.Verbs {
+		completions = append(completions, CommandCompletion{
+			Value:       verb.ID,
+			Display:     verb.Name,
+			Description: verb.Description,
+			Complete:    fmt.Sprintf("/%s %s ", topicID, verb.ID),
+		})
+	}
+	return completions
+}
+
+// InitializeBuiltinCommands sets up all built-in commands with the new structure
+func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
+	// Session commands
+	sessionTopic := &Topic{
+		ID:          "session",
+		Name:        "Session",
+		Description: "Manage chat sessions",
+		Icon:        "💬",
+	}
+	registry.RegisterTopic(sessionTopic)
+
+	registry.RegisterVerb("session", &Verb{
+		ID:          "new",
+		Name:        "New",
+		Description: "Create a new session",
+		Handler:     handleHierSessionNew,
+		ArgsHelp:    "[name]",
+		MinArgs:     0,
+		MaxArgs:     1,
+	})
+
+	registry.RegisterVerb("session", &Verb{
+		ID:          "list",
+		Name:        "List",
+		Description: "List all sessions",
+		Handler:     handleHierSessionList,
+		MinArgs:     0,
+		MaxArgs:     0,
+	})
+
+	registry.RegisterVerb("session", &Verb{
+		ID:          "clear",
+		Name:        "Clear",
+		Description: "Clear current session",
+		Handler:     handleHierSessionClear,
+		MinArgs:     0,
+		MaxArgs:     0,
+	})
+
+	registry.RegisterVerb("session", &Verb{
+		ID:          "compact",
+		Name:        "Compact",
+		Description: "Compact current session",
+		Handler:     handleHierSessionCompact,
+		ArgsHelp:    "[instructions]",
+		MinArgs:     0,
+		MaxArgs:     -1, // Unlimited args for instructions
+	})
+
+	// Config commands
+	configTopic := &Topic{
+		ID:          "config",
+		Name:        "Configuration",
+		Description: "Configuration and settings",
+		Icon:        "⚙️",
+	}
+	registry.RegisterTopic(configTopic)
+
+	registry.RegisterVerb("config", &Verb{
+		ID:          "show",
+		Name:        "Show",
+		Description: "View configuration",
+		Handler:     handleHierConfigShow,
+		MinArgs:     0,
+		MaxArgs:     0,
+	})
+
+	registry.RegisterVerb("config", &Verb{
+		ID:          "model",
+		Name:        "Model",
+		Description: "Select AI model",
+		Handler:     handleHierConfigModel,
+		ArgsHelp:    "[model-name]",
+		MinArgs:     0,
+		MaxArgs:     1,
+	})
+
+	// Project commands
+	projectTopic := &Topic{
+		ID:          "project",
+		Name:        "Project",
+		Description: "Project management",
+		Icon:        "📁",
+	}
+	registry.RegisterTopic(projectTopic)
+
+	registry.RegisterVerb("project", &Verb{
+		ID:          "init",
+		Name:        "Initialize",
+		Description: "Initialize project with CLAUDE.md",
+		Handler:     handleHierProjectInit,
+		MinArgs:     0,
+		MaxArgs:     0,
+	})
+
+	// Auth commands
+	authTopic := &Topic{
+		ID:          "auth",
+		Name:        "Authentication",
+		Description: "Authentication and login",
+		Icon:        "🔐",
+	}
+	registry.RegisterTopic(authTopic)
+
+	registry.RegisterVerb("auth", &Verb{
+		ID:          "login",
+		Name:        "Login",
+		Description: "Login to provider",
+		Handler:     handleHierAuthLogin,
+		ArgsHelp:    "<provider>",
+		MinArgs:     1,
+		MaxArgs:     1,
+	})
+
+	registry.RegisterVerb("auth", &Verb{
+		ID:          "logout",
+		Name:        "Logout",
+		Description: "Logout from provider",
+		Handler:     handleHierAuthLogout,
+		ArgsHelp:    "[provider]",
+		MinArgs:     0,
+		MaxArgs:     1,
+	})
+
+	registry.RegisterVerb("auth", &Verb{
+		ID:          "status",
+		Name:        "Status",
+		Description: "Show authentication status",
+		Handler:     handleHierAuthStatus,
+		MinArgs:     0,
+		MaxArgs:     0,
+	})
+
+	// System commands
+	systemTopic := &Topic{
+		ID:          "system",
+		Name:        "System",
+		Description: "System commands",
+		Icon:        "🖥️",
+	}
+	registry.RegisterTopic(systemTopic)
+
+	registry.RegisterVerb("system", &Verb{
+		ID:          "help",
+		Name:        "Help",
+		Description: "Show help information",
+		Handler:     handleHierSystemHelp,
+		MinArgs:     0,
+		MaxArgs:     1,
+	})
+
+	registry.RegisterVerb("system", &Verb{
+		ID:          "exit",
+		Name:        "Exit",
+		Description: "Exit application",
+		Handler:     handleHierSystemExit,
+		MinArgs:     0,
+		MaxArgs:     0,
+	})
+
+	// Help as a special top-level command
+	helpTopic := &Topic{
+		ID:          "help",
+		Name:        "Help",
+		Description: "Show help information",
+		Icon:        "❓",
+		Verbs: map[string]*Verb{
+			"": { // Empty verb for just "/help"
+				ID:      "",
+				Name:    "General Help",
+				Handler: handleHierHelp,
+				MinArgs: 0,
+				MaxArgs: 0,
+			},
+		},
+	}
+	registry.RegisterTopic(helpTopic)
+
+	return nil
+}
+
+// Command handlers (these will send appropriate messages to the TUI)
+func handleHierSessionNew(ctx context.Context, args map[string]interface{}) error {
+	// This will be implemented to send the appropriate message
+	return fmt.Errorf("session_new_requested")
+}
+
+func handleHierSessionList(ctx context.Context, args map[string]interface{}) error {
+	return fmt.Errorf("session_list_requested")
+}
+
+func handleHierSessionClear(ctx context.Context, args map[string]interface{}) error {
+	return fmt.Errorf("clear_session_requested")
+}
+
+func handleHierSessionCompact(ctx context.Context, args map[string]interface{}) error {
+	cmdArgs := args["args"].([]string)
+	instructions := strings.Join(cmdArgs, " ")
+	// Store instructions in args for later use
+	args["instructions"] = instructions
+	return fmt.Errorf("compact_session_requested")
+}
+
+func handleHierConfigShow(ctx context.Context, args map[string]interface{}) error {
+	return fmt.Errorf("config_show_requested")
+}
+
+func handleHierConfigModel(ctx context.Context, args map[string]interface{}) error {
+	return fmt.Errorf("config_model_requested")
+}
+
+func handleHierProjectInit(ctx context.Context, args map[string]interface{}) error {
+	return fmt.Errorf("init_project_requested")
+}
+
+func handleHierAuthLogin(ctx context.Context, args map[string]interface{}) error {
+	cmdArgs := args["args"].([]string)
+	if len(cmdArgs) > 0 {
+		args["provider"] = cmdArgs[0]
+	}
+	return fmt.Errorf("auth_login_requested")
+}
+
+func handleHierAuthLogout(ctx context.Context, args map[string]interface{}) error {
+	cmdArgs := args["args"].([]string)
+	if len(cmdArgs) > 0 {
+		args["provider"] = cmdArgs[0]
+	}
+	return fmt.Errorf("auth_logout_requested")
+}
+
+func handleHierAuthStatus(ctx context.Context, args map[string]interface{}) error {
+	return fmt.Errorf("auth_status_requested")
+}
+
+func handleHierSystemHelp(ctx context.Context, args map[string]interface{}) error {
+	return fmt.Errorf("help_requested")
+}
+
+func handleHierSystemExit(ctx context.Context, args map[string]interface{}) error {
+	return fmt.Errorf("exit_requested")
+}
+
+func handleHierHelp(ctx context.Context, args map[string]interface{}) error {
+	return fmt.Errorf("help_requested")
+}

@@ -157,13 +157,8 @@ func (c *completionDialogCmp) complete(item CompletionItemI) tea.Cmd {
 		return nil
 	}
 
-	return tea.Batch(
-		util.CmdHandler(CompletionSelectedMsg{
-			SearchString:    value,
-			CompletionValue: item.GetValue(),
-		}),
-		c.close(),
-	)
+	// Use enhanced handling for slash commands
+	return HandleSlashCommandCompletion(c.completionProvider, value, item)
 }
 
 func (c *completionDialogCmp) close() tea.Cmd {
@@ -176,6 +171,12 @@ func (c *completionDialogCmp) close() tea.Cmd {
 
 func (c *completionDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+	
+	// Check for slash command specific handling first
+	if slashModel, slashCmd := UpdateCompletionDialogForSlashCommands(c, msg); slashModel != nil {
+		return slashModel, slashCmd
+	}
+	
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if c.pseudoSearchTextArea.Focused() {

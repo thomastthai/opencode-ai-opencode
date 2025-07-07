@@ -2,12 +2,14 @@ package page
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/opencode-ai/opencode/internal/app"
+	"github.com/opencode-ai/opencode/internal/commands"
 	"github.com/opencode-ai/opencode/internal/completions"
 	"github.com/opencode-ai/opencode/internal/message"
 	"github.com/opencode-ai/opencode/internal/session"
@@ -19,6 +21,8 @@ import (
 )
 
 var ChatPage PageID = "chat"
+
+type startCompactSessionMsg struct{}
 
 type chatPage struct {
 	app                     *app.App
@@ -93,7 +97,7 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	editorValue := p.editor.GetValue()
 	if strings.HasPrefix(editorValue, "/") {
 		// Only set provider if dialog is not already showing or provider needs to change
-		if !p.showCompletionDialog || p.completionDialog.GetId() != "commands" {
+		if !p.showCompletionDialog || p.completionDialog.GetId() != "slash-commands" {
 			p.completionDialog.SetProvider(p.commandCompletionProvider)
 		}
 		p.showCompletionDialog = true
@@ -111,6 +115,26 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case dialog.CompletionDialogCloseMsg:
 		p.showCompletionDialog = false
+	case dialog.SlashCommandCompleteMsg:
+		// Forward to editor to update text
+		updated, cmd := p.editor.Update(msg)
+		p.editor = updated.(*chat.EditorCmp)
+		cmds = append(cmds, cmd)
+		
+		// Keep dialog open if needed
+		if !msg.KeepOpen {
+			p.showCompletionDialog = false
+		}
+	case dialog.SlashCommandExecuteMsg:
+		// Close completion dialog
+		p.showCompletionDialog = false
+		
+		// Create parser and execute command
+		parser := commands.NewCommandParser(commands.GetGlobalRegistry())
+		cmd := dialog.ExecuteSlashCommand(parser, msg.Raw)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case chat.SendMsg:
 		// When a message is sent, clear the completion dialog.
 		p.showCompletionDialog = false
@@ -133,6 +157,45 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd != nil {
 			return p, cmd
 		}
+	case dialog.SessionClearRequestedMsg:
+		// Clear the current session (same as Ctrl+N)
+		p.session = session.Session{}
+		return p, tea.Batch(
+			p.clearSidebar(),
+			util.CmdHandler(chat.SessionClearedMsg{}),
+		)
+	case dialog.SessionCompactRequestedMsg:
+		// Trigger session compacting with optional instructions
+		if msg.Instructions != "" {
+			// TODO: Pass instructions to compact handler
+		}
+		return p, func() tea.Msg { return startCompactSessionMsg{} }
+	case dialog.ProjectInitRequestedMsg:
+		// Send the init prompt to create CLAUDE.md
+		prompt := `Please analyze this codebase and create a CLAUDE.md file containing:
+1. Build/lint/test commands - especially for running a single test
+2. Code style guidelines including imports, formatting, types, naming conventions, error handling, etc.
+
+The file you create will be given to agentic coding agents (such as yourself) that operate in this repository. Make it about 20 lines long.
+If there's already a CLAUDE.md, improve it.
+If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (in .github/copilot-instructions.md), make sure to include them.`
+		cmd := p.sendMessage(prompt, nil)
+		if cmd != nil {
+			return p, cmd
+		}
+	case dialog.AuthLoginRequestedMsg:
+		// Handle OAuth2 login
+		switch msg.Provider {
+		case "gemini":
+			return p, util.CmdHandler(dialog.ShowOAuth2DialogMsg{
+				Provider: dialog.OAuth2ProviderGemini,
+			})
+		default:
+			return p, util.ReportWarn(fmt.Sprintf("Unknown provider: %s", msg.Provider))
+		}
+	case dialog.HelpRequestedMsg:
+		// Show help (toggle help dialog)
+		return p, func() tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}} }
 	case chat.SessionSelectedMsg:
 		if p.session.ID == "" {
 			cmd := p.setSidebar()
@@ -253,7 +316,7 @@ func (p *chatPage) BindingKeys() []key.Binding {
 
 func NewChatPage(app *app.App) tea.Model {
 	fileCompletionProvider := completions.NewFileAndFolderContextGroup()
-	commandCompletionProvider := completions.NewCommandCompletionProvider()
+	commandCompletionProvider := completions.NewSlashCommandProvider()
 
 	completionDialog := dialog.NewCompletionDialogCmp(fileCompletionProvider)
 

@@ -1,0 +1,128 @@
+package completions
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/opencode-ai/opencode/internal/commands"
+	"github.com/opencode-ai/opencode/internal/tui/components/dialog"
+)
+
+// slashCommandProvider provides completions for slash commands
+type slashCommandProvider struct {
+	parser       *commands.CommandParser
+	registry     *commands.CommandRegistry
+	currentQuery string // Track current query for progressive completion
+}
+
+// NewSlashCommandProvider creates a new slash command completion provider
+func NewSlashCommandProvider() dialog.CompletionProvider {
+	registry := commands.GetGlobalRegistry()
+	return &slashCommandProvider{
+		parser:   commands.NewCommandParser(registry),
+		registry: registry,
+	}
+}
+
+// GetId returns the provider ID
+func (p *slashCommandProvider) GetId() string {
+	return "slash-commands"
+}
+
+// GetEntry returns the top-level entry for this provider
+func (p *slashCommandProvider) GetEntry() dialog.CompletionItemI {
+	return &dialog.CompletionItem{
+		Title: "Commands",
+		Value: "/",
+	}
+}
+
+// GetChildEntries returns completion items based on the query
+func (p *slashCommandProvider) GetChildEntries(query string) ([]dialog.CompletionItemI, error) {
+	// Store the query for later use
+	p.currentQuery = query
+	
+	// Parse the current input
+	parsed := p.parser.Parse(query)
+	completions := p.parser.GetCompletions(parsed)
+	
+	items := make([]dialog.CompletionItemI, len(completions))
+	for i, comp := range completions {
+		// Create a custom completion item that stores the complete text
+		items[i] = &SlashCommandItem{
+			CompletionItem: dialog.CompletionItem{
+				Title: fmt.Sprintf("%s %s", comp.Icon, comp.Display),
+				Value: comp.Complete, // Use the complete text as value
+			},
+			Description: comp.Description,
+			Complete:    comp.Complete,
+		}
+	}
+	
+	return items, nil
+}
+
+// SlashCommandItem extends CompletionItem with additional metadata
+type SlashCommandItem struct {
+	dialog.CompletionItem
+	Description string
+	Complete    string
+}
+
+// Render customizes the display of slash command items
+func (s *SlashCommandItem) Render(selected bool, width int) string {
+	// Use the parent's rendering for now
+	// This can be customized later to show descriptions
+	return s.CompletionItem.Render(selected, width)
+}
+
+// HandleTabCompletion handles tab key for command completion
+func HandleTabCompletion(provider dialog.CompletionProvider, input string) (string, []dialog.CompletionItemI, error) {
+	if p, ok := provider.(*slashCommandProvider); ok {
+		completed, options := p.parser.GetTabCompletion(input)
+		
+		if options == nil {
+			// Single match or no change
+			return completed, nil, nil
+		}
+		
+		// Convert options to completion items
+		items := make([]dialog.CompletionItemI, len(options))
+		for i, opt := range options {
+			items[i] = &SlashCommandItem{
+				CompletionItem: dialog.CompletionItem{
+					Title: fmt.Sprintf("%s %s", opt.Icon, opt.Display),
+					Value: opt.Complete,
+				},
+				Description: opt.Description,
+				Complete:    opt.Complete,
+			}
+		}
+		
+		return completed, items, nil
+	}
+	
+	return input, nil, fmt.Errorf("not a slash command provider")
+}
+
+// ParseSlashCommand parses a slash command string
+func ParseSlashCommand(input string) commands.SlashCommand {
+	registry := commands.GetGlobalRegistry()
+	parser := commands.NewCommandParser(registry)
+	return parser.Parse(input)
+}
+
+// IsSlashCommand checks if input is a slash command
+func IsSlashCommand(input string) bool {
+	return strings.HasPrefix(input, "/")
+}
+
+// SlashCommandCompleteMsg is sent when a slash command should be completed
+type SlashCommandCompleteMsg struct {
+	Value string
+}
+
+// SlashCommandExecuteMsg is sent when a slash command should be executed
+type SlashCommandExecuteMsg struct {
+	Command commands.SlashCommand
+}

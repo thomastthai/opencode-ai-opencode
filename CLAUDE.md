@@ -2,11 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-For comprehensive instructions that apply to all AI assistants, see [AI.md](./ai-assistants/AI.md).
+For comprehensive instructions that apply to all AI assistants, see [AI.md](./docs/ai-assistants/AI.md).
 
 ## Claude-Specific Notes
 
 - When using Claude Code, follow all guidelines in AI.md
 - Pay special attention to the architecture and testing patterns referenced there
 - Use the defensive programming and state management principles from ARCHITECTURE.md
-
