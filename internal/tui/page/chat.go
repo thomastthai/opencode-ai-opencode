@@ -22,7 +22,7 @@ import (
 
 var ChatPage PageID = "chat"
 
-type startCompactSessionMsg struct{}
+// Removed local startCompactSessionMsg - should use the one from parent package
 
 type chatPage struct {
 	app                     *app.App
@@ -165,11 +165,24 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			util.CmdHandler(chat.SessionClearedMsg{}),
 		)
 	case dialog.SessionCompactRequestedMsg:
-		// Trigger session compacting with optional instructions
+		// Send summarization prompt to create a compact summary
+		prompt := `Please provide a comprehensive summary of our conversation so far. Focus on:
+- What we discussed and accomplished
+- Key decisions and solutions
+- Current state of any work in progress
+- Important context for continuing the conversation
+
+This summary will be used to start a fresh session while preserving important context.`
+		
 		if msg.Instructions != "" {
-			// TODO: Pass instructions to compact handler
+			prompt += "\n\nAdditional instructions: " + msg.Instructions
 		}
-		return p, func() tea.Msg { return startCompactSessionMsg{} }
+		
+		cmd := p.sendMessage(prompt, nil)
+		if cmd != nil {
+			return p, cmd
+		}
+		return p, nil
 	case dialog.ProjectInitRequestedMsg:
 		// Send the init prompt to create CLAUDE.md
 		prompt := `Please analyze this codebase and create a CLAUDE.md file containing:
