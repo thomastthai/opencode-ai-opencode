@@ -625,13 +625,15 @@ Type `/` in the chat to activate slash commands with intelligent features:
 - The completion dialog stays open while building multi-part commands
 
 #### **Command Structure**
-Commands follow a consistent pattern: `/<topic> <verb> [args]`
+Commands follow a consistent pattern: `/<topic> <verb> [sub-command] [args...]`
 
 Examples:
-- `/session list` - List all sessions
-- `/session new my-project` - Create a new session
-- `/auth login gemini` - Login to Gemini provider
-- `/file open main.go` - Open a file
+- `/session list` - List all sessions (topic: session, verb: list)
+- `/session new my-project` - Create a new session (topic: session, verb: new, args: my-project)
+- `/auth login gemini` - Login to Gemini provider (topic: auth, verb: login, sub-command: gemini)
+- `/auth logout gemini` - Logout from Gemini (topic: auth, verb: logout, sub-command: gemini)
+- `/file open main.go` - Open a file (topic: file, verb: open, args: main.go)
+- `/model select gpt-4o` - Select a model (topic: model, verb: select, args: gpt-4o)
 
 #### **Tab Completion**
 - Press `Tab` to complete partial commands
