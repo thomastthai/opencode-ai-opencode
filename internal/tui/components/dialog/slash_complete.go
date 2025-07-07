@@ -1,6 +1,8 @@
 package dialog
 
 import (
+	"strings"
+	
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/opencode-ai/opencode/internal/logging"
@@ -100,7 +102,12 @@ func UpdateCompletionDialogForSlashCommands(c *completionDialogCmp, msg tea.Msg)
 		}
 		
 		// Update completions for the new value
-		items, err := c.completionProvider.GetChildEntries(msg.NewValue)
+		// Strip the leading slash if present since GetChildEntries expects query without it
+		query := msg.NewValue
+		if strings.HasPrefix(query, "/") {
+			query = query[1:]
+		}
+		items, err := c.completionProvider.GetChildEntries(query)
 		if err != nil {
 			logging.Error("Failed to get completions", err)
 			return c, nil
