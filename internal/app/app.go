@@ -18,6 +18,7 @@ import (
 	"github.com/opencode-ai/opencode/internal/lsp"
 	"github.com/opencode-ai/opencode/internal/message"
 	"github.com/opencode-ai/opencode/internal/permission"
+	"github.com/opencode-ai/opencode/internal/recovery"
 	"github.com/opencode-ai/opencode/internal/session"
 	"github.com/opencode-ai/opencode/internal/tui/theme"
 )
@@ -27,6 +28,7 @@ type App struct {
 	Messages    message.Service
 	History     history.Service
 	Permissions permission.Service
+	Recovery    recovery.Service
 
 	CoderAgent agent.Service
 
@@ -50,6 +52,7 @@ func New(ctx context.Context, conn *sql.DB, isTest bool) (*App, error) {
 		Messages:    messages,
 		History:     files,
 		Permissions: permission.NewPermissionService(),
+		Recovery:    recovery.NewService(),
 		LSPClients:  make(map[string]*lsp.Client),
 	}
 

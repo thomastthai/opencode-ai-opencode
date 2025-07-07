@@ -19,6 +19,7 @@ import (
 	"github.com/opencode-ai/opencode/internal/llm/agent"
 	"github.com/opencode-ai/opencode/internal/logging"
 	"github.com/opencode-ai/opencode/internal/pubsub"
+	"github.com/opencode-ai/opencode/internal/recovery"
 	"github.com/opencode-ai/opencode/internal/tui"
 	"github.com/opencode-ai/opencode/internal/version"
 	"github.com/spf13/cobra"
@@ -264,32 +265,63 @@ func handleResume(app *app.App) {
 func performHealthChecks(ctx context.Context, app *app.App) {
 	logging.Info("Performing post-resume health checks...")
 	
+	// Create a context with timeout for the entire recovery process
+	recoveryCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	
+	// Start recovery tracking
+	recoverySteps := []string{"sessions", "messages", "history", "shell", "lsp", "agent"}
+	app.Recovery.StartRecovery(recoveryCtx, recoverySteps)
+	
+	// Set up a timeout handler
+	go func() {
+		<-recoveryCtx.Done()
+		if recoveryCtx.Err() == context.DeadlineExceeded {
+			logging.Warn("Recovery process timed out")
+			app.Recovery.FailRecovery(fmt.Errorf("recovery timed out after 30 seconds"))
+		}
+	}()
+	
 	// Check session service health
-	if err := app.Sessions.HealthCheck(ctx); err != nil {
+	app.Recovery.UpdateStep("sessions", recovery.StepInProgress, nil)
+	if err := app.Sessions.HealthCheck(recoveryCtx); err != nil {
 		logging.Warn("Session service health check failed after resume", "error", err)
+		app.Recovery.UpdateStep("sessions", recovery.StepFailed, err)
 	} else {
 		logging.Info("Session service health check passed")
+		app.Recovery.UpdateStep("sessions", recovery.StepCompleted, nil)
 	}
 	
 	// Check message service health
-	if err := app.Messages.HealthCheck(ctx); err != nil {
+	app.Recovery.UpdateStep("messages", recovery.StepInProgress, nil)
+	if err := app.Messages.HealthCheck(recoveryCtx); err != nil {
 		logging.Warn("Message service health check failed after resume", "error", err)
+		app.Recovery.UpdateStep("messages", recovery.StepFailed, err)
 	} else {
 		logging.Info("Message service health check passed")
+		app.Recovery.UpdateStep("messages", recovery.StepCompleted, nil)
 	}
 	
 	// Check history service health
-	if err := app.History.HealthCheck(ctx); err != nil {
+	app.Recovery.UpdateStep("history", recovery.StepInProgress, nil)
+	if err := app.History.HealthCheck(recoveryCtx); err != nil {
 		logging.Warn("History service health check failed after resume", "error", err)
+		app.Recovery.UpdateStep("history", recovery.StepFailed, err)
 	} else {
 		logging.Info("History service health check passed")
+		app.Recovery.UpdateStep("history", recovery.StepCompleted, nil)
 	}
 	
-	// Note: Shell and LSP health checks are performed automatically
-	// when they are accessed through GetPersistentShell() and LSP methods
-	// that call IsHealthy() and restart if needed
+	// Mark remaining steps as completed (they self-recover on access)
+	app.Recovery.UpdateStep("shell", recovery.StepCompleted, nil)
+	app.Recovery.UpdateStep("lsp", recovery.StepCompleted, nil) 
+	app.Recovery.UpdateStep("agent", recovery.StepCompleted, nil)
 	
-	logging.Info("Post-resume health checks completed")
+	// Complete recovery if not already timed out
+	if recoveryCtx.Err() == nil {
+		app.Recovery.CompleteRecovery()
+		logging.Info("Post-resume health checks completed")
+	}
 }
 
 func initMCPTools(ctx context.Context, app *app.App) {
@@ -357,6 +389,7 @@ func setupSubscriptions(app *app.App, parentCtx context.Context) (chan tea.Msg, 
 	setupSubscriber(ctx, &wg, "messages", app.Messages.Subscribe, ch)
 	setupSubscriber(ctx, &wg, "permissions", app.Permissions.Subscribe, ch)
 	setupSubscriber(ctx, &wg, "coderAgent", app.CoderAgent.Subscribe, ch)
+	setupSubscriber(ctx, &wg, "recovery", app.Recovery.Subscribe, ch)
 
 	cleanupFunc := func() {
 		logging.Info("Cancelling all subscriptions")

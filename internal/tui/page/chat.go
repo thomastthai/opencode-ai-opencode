@@ -13,6 +13,7 @@ import (
 	"github.com/opencode-ai/opencode/internal/session"
 	"github.com/opencode-ai/opencode/internal/tui/components/chat"
 	"github.com/opencode-ai/opencode/internal/tui/components/dialog"
+	recoveryDialog "github.com/opencode-ai/opencode/internal/tui/components/recovery"
 	"github.com/opencode-ai/opencode/internal/tui/layout"
 	"github.com/opencode-ai/opencode/internal/tui/util"
 )
@@ -27,6 +28,7 @@ type chatPage struct {
 	session                 session.Session
 	completionDialog        dialog.CompletionDialog
 	showCompletionDialog    bool
+	recoveryDialog          *recoveryDialog.RecoveryDialog
 	fileCompletionProvider  dialog.CompletionProvider
 	commandCompletionProvider dialog.CompletionProvider
 }
@@ -51,6 +53,7 @@ func (p *chatPage) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		p.layout.Init(),
 		p.completionDialog.Init(),
+		p.recoveryDialog.Init(),
 	}
 	return tea.Batch(cmds...)
 }
@@ -58,6 +61,27 @@ func (p *chatPage) Init() tea.Cmd {
 func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	var cmd tea.Cmd
+
+	// Update recovery dialog first (highest priority)
+	recoveryUpdated, recoveryCmd := p.recoveryDialog.Update(msg)
+	p.recoveryDialog = recoveryUpdated.(*recoveryDialog.RecoveryDialog)
+	if recoveryCmd != nil {
+		cmds = append(cmds, recoveryCmd)
+	}
+
+	// Block most input during recovery
+	if p.app.Recovery.IsRecovering() && p.recoveryDialog.IsVisible() {
+		switch msg.(type) {
+		case tea.KeyMsg:
+			// Only allow recovery dialog keys and window resize
+			return p, tea.Batch(cmds...)
+		case tea.WindowSizeMsg:
+			// Allow window resize events
+		default:
+			// Block other input during recovery
+			return p, tea.Batch(cmds...)
+		}
+	}
 
 	// Route messages to the layout first, which handles the editor.
 	// This ensures the editor's value is up-to-date for our logic below.
@@ -201,6 +225,16 @@ func (p *chatPage) View() string {
 		)
 	}
 
+	// Recovery dialog has highest priority and overlays everything
+	if p.recoveryDialog.IsVisible() {
+		width, height := p.layout.GetSize()
+		p.recoveryDialog.SetSize(width, height)
+		recoveryOverlay := p.recoveryDialog.View()
+		if recoveryOverlay != "" {
+			layoutView = recoveryOverlay
+		}
+	}
+
 	return layoutView
 }
 
@@ -233,6 +267,7 @@ func NewChatPage(app *app.App) tea.Model {
 		editor:                  editorCmp.(*chat.EditorCmp),
 		messages:                messagesContainer,
 		completionDialog:        completionDialog,
+		recoveryDialog:          recoveryDialog.NewRecoveryDialog(),
 		fileCompletionProvider:  fileCompletionProvider,
 		commandCompletionProvider: commandCompletionProvider,
 		layout: layout.NewSplitPane(
