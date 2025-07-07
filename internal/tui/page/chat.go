@@ -92,10 +92,16 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Check the editor's value to determine completion state.
 	editorValue := p.editor.GetValue()
 	if strings.HasPrefix(editorValue, "/") {
-		p.completionDialog.SetProvider(p.commandCompletionProvider)
+		// Only set provider if dialog is not already showing or provider needs to change
+		if !p.showCompletionDialog || p.completionDialog.GetId() != "commands" {
+			p.completionDialog.SetProvider(p.commandCompletionProvider)
+		}
 		p.showCompletionDialog = true
 	} else if strings.HasPrefix(editorValue, "@") {
-		p.completionDialog.SetProvider(p.fileCompletionProvider)
+		// Only set provider if dialog is not already showing or provider needs to change
+		if !p.showCompletionDialog || p.completionDialog.GetId() != "files" {
+			p.completionDialog.SetProvider(p.fileCompletionProvider)
+		}
 		p.showCompletionDialog = true
 	} else {
 		p.showCompletionDialog = false
