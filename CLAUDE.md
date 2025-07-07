@@ -67,6 +67,15 @@ OpenCode is a terminal-based AI assistant built with Go, featuring:
   - Multi-source configuration priority handling
   - Error scenarios and edge case handling
 
+## Testing Guidelines
+
+**IMPORTANT**: Refer to [TESTING.md](./TESTING.md) for comprehensive testing guidelines, patterns, and lessons learned from production bugs. Key principles:
+- Test user-visible behavior, not just internal state
+- Verify ALL state changes during transitions
+- Initialize test objects with all required dependencies
+- Test edge cases and error conditions
+- Follow the testing patterns documented to prevent regressions
+
 ## git
 
 When making a git commit, do not include an reference or advertising from Claude or Claude Code. The commit message should be clear and concise, focusing on the changes made in the codebase.
