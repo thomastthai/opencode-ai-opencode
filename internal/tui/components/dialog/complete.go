@@ -82,15 +82,44 @@ type CompletionDialog interface {
 	SetWidth(width int)
 	SetProvider(provider CompletionProvider)
 	GetId() string
+	// Test helper methods
+	GetListItems() []CompletionItemI
+	GetEmptyMessage() string
 }
 
 func (c *completionDialogCmp) GetId() string {
 	return c.completionProvider.GetId()
 }
 
+// GetListItems returns the current items in the completion list (for testing)
+func (c *completionDialogCmp) GetListItems() []CompletionItemI {
+	return c.listView.GetItems()
+}
+
+// GetEmptyMessage returns the current empty message (for testing)
+func (c *completionDialogCmp) GetEmptyMessage() string {
+	return c.listView.GetEmptyMessage()
+}
+
 
 func (c *completionDialogCmp) SetProvider(provider CompletionProvider) {
 	c.completionProvider = provider
+	// Reset query when switching providers
+	c.query = ""
+	// Update the empty message based on provider type
+	emptyMsg := "No matches found"
+	if provider.GetId() == "commands" {
+		emptyMsg = "No commands found"
+	} else if provider.GetId() == "files" {
+		emptyMsg = "No file matches found"
+	}
+	// Update the list with new provider's items
+	items, err := provider.GetChildEntries("")
+	if err != nil {
+		logging.Error("Failed to get child entries", err)
+	}
+	c.listView.SetItems(items)
+	c.listView.SetEmptyMessage(emptyMsg)
 }
 
 

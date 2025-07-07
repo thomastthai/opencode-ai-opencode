@@ -20,6 +20,8 @@ type SimpleList[T SimpleListItem] interface {
 	GetSelectedItem() (item T, idx int)
 	SetItems(items []T)
 	GetItems() []T
+	SetEmptyMessage(msg string)
+	GetEmptyMessage() string
 }
 
 type simpleListCmp[T SimpleListItem] struct {
@@ -107,6 +109,14 @@ func (c *simpleListCmp[T]) GetItems() []T {
 
 func (c *simpleListCmp[T]) SetMaxWidth(width int) {
 	c.maxWidth = width
+}
+
+func (c *simpleListCmp[T]) SetEmptyMessage(msg string) {
+	c.fallbackMsg = msg
+}
+
+func (c *simpleListCmp[T]) GetEmptyMessage() string {
+	return c.fallbackMsg
 }
 
 func (c *simpleListCmp[T]) View() string {
