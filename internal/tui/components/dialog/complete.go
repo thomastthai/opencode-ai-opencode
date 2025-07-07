@@ -183,6 +183,12 @@ func (c *completionDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if !key.Matches(msg, completionDialogKeys.Complete) {
 
+				// Check for tab key first
+				if key.Matches(msg, slashCompletionDialogKeys.Tab) {
+					// Tab is handled by UpdateCompletionDialogForSlashCommands
+					return c, tea.Batch(cmds...)
+				}
+				
 				var cmd tea.Cmd
 				c.pseudoSearchTextArea, cmd = c.pseudoSearchTextArea.Update(msg)
 				cmds = append(cmds, cmd)
@@ -309,7 +315,7 @@ func NewCompletionDialogCmp(completionProvider CompletionProvider) CompletionDia
 		items,
 		7,
 		"No file matches found",
-		false,
+		true, // Enable vim navigation keys (j/k)
 	)
 
 	return &completionDialogCmp{
