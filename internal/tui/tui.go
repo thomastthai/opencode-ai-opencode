@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 	"time"
 	
@@ -10,8 +11,10 @@ import (
 	"github.com/opencode-ai/opencode/internal/app"
 	"github.com/opencode-ai/opencode/internal/commands"
 	"github.com/opencode-ai/opencode/internal/config"
+	"github.com/opencode-ai/opencode/internal/llm/agent"
 	"github.com/opencode-ai/opencode/internal/tui/command"
 	"github.com/opencode-ai/opencode/internal/logging"
+	"github.com/opencode-ai/opencode/internal/pubsub"
 	"github.com/opencode-ai/opencode/internal/session"
 	"github.com/opencode-ai/opencode/internal/tui/components/chat"
 	"github.com/opencode-ai/opencode/internal/tui/components/core"
@@ -306,9 +309,52 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Handle compact session message
 	case startCompactSessionMsg:
+		// Start compacting the current session
 		a.isCompacting = true
-		a.compactingMessage = "Preparing to compact session..."
+		a.compactingMessage = "Starting summarization..."
+
+		// Get the current session ID from the chat page
+		chatPage, ok := a.pages[page.ChatPage].(interface{ GetCurrentSessionID() string })
+		if !ok || chatPage.GetCurrentSessionID() == "" {
+			a.isCompacting = false
+			return a, util.ReportWarn("No active session to summarize")
+		}
+
+		sessionID := chatPage.GetCurrentSessionID()
+		
+		// Start the summarization process
+		return a, func() tea.Msg {
+			ctx := context.Background()
+			if err := a.app.CoderAgent.Summarize(ctx, sessionID); err != nil {
+				return util.ReportError(err)
+			}
+			return nil
+		}
+		
+	// Handle agent events for summarization
+	case pubsub.Event[agent.AgentEvent]:
+		payload := msg.Payload
+		if payload.Type == agent.AgentEventTypeSummarize {
+			if payload.Error != nil {
+				a.isCompacting = false
+				return a, util.ReportError(payload.Error)
+			}
+			
+			a.compactingMessage = payload.Progress
+			
+			if payload.Done {
+				a.isCompacting = false
+				return a, util.ReportInfo("Session compacted successfully")
+			}
+		}
 		return a, nil
+		
+	// Handle compact request from chat page
+	case page.CompactSessionRequestMsg:
+		// Trigger the compact process
+		return a, func() tea.Msg {
+			return startCompactSessionMsg{}
+		}
 	}
 
 	// Handle all other messages

@@ -22,7 +22,8 @@ import (
 
 var ChatPage PageID = "chat"
 
-// Removed local startCompactSessionMsg - should use the one from parent package
+// CompactSessionRequestMsg is sent to trigger session compacting
+type CompactSessionRequestMsg struct{}
 
 type chatPage struct {
 	app                     *app.App
@@ -51,6 +52,11 @@ var keyMap = ChatKeyMap{
 		key.WithKeys("esc"),
 		key.WithHelp("esc", "cancel"),
 	),
+}
+
+// GetCurrentSessionID returns the current session ID
+func (p *chatPage) GetCurrentSessionID() string {
+	return p.session.ID
 }
 
 func (p *chatPage) Init() tea.Cmd {
@@ -165,24 +171,11 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			util.CmdHandler(chat.SessionClearedMsg{}),
 		)
 	case dialog.SessionCompactRequestedMsg:
-		// Send summarization prompt to create a compact summary
-		prompt := `Please provide a comprehensive summary of our conversation so far. Focus on:
-- What we discussed and accomplished
-- Key decisions and solutions
-- Current state of any work in progress
-- Important context for continuing the conversation
-
-This summary will be used to start a fresh session while preserving important context.`
-		
-		if msg.Instructions != "" {
-			prompt += "\n\nAdditional instructions: " + msg.Instructions
+		// Trigger session compacting through the proper channel
+		// Send a message upward to trigger the compact process
+		return p, func() tea.Msg {
+			return CompactSessionRequestMsg{}
 		}
-		
-		cmd := p.sendMessage(prompt, nil)
-		if cmd != nil {
-			return p, cmd
-		}
-		return p, nil
 	case dialog.ProjectInitRequestedMsg:
 		// Send the init prompt to create CLAUDE.md
 		prompt := `Please analyze this codebase and create a CLAUDE.md file containing:
