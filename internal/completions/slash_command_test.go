@@ -41,10 +41,19 @@ func TestSlashCommandProvider(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Greater(t, len(items), 0, "Should have command completions")
 		
-		// Check that values are complete commands
+		// Check that values are command names
 		for _, item := range items {
-			assert.True(t, strings.HasPrefix(item.GetValue(), "/session "), 
-				"Command completion should include topic")
+			// Value should be just the command name
+			value := item.GetValue()
+			assert.True(t, len(value) > 0 && !strings.Contains(value, "/"), 
+				"Command value should be just the command name")
+			
+			// Check if it has complete value
+			if slashItem, ok := item.(interface{ GetCompleteValue() string }); ok {
+				complete := slashItem.GetCompleteValue()
+				assert.True(t, strings.HasPrefix(complete, "/session "), 
+					"Complete value should include topic")
+			}
 		}
 	})
 
@@ -52,7 +61,12 @@ func TestSlashCommandProvider(t *testing.T) {
 		items, err := provider.GetChildEntries("/se")
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(items), "Should have one matching topic")
-		assert.Equal(t, "/session ", items[0].GetValue())
+		assert.Equal(t, "session", items[0].GetValue())
+		
+		// Check complete value
+		if slashItem, ok := items[0].(interface{ GetCompleteValue() string }); ok {
+			assert.Equal(t, "/session ", slashItem.GetCompleteValue())
+		}
 	})
 
 	t.Run("tab completion single match", func(t *testing.T) {

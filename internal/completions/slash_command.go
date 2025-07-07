@@ -70,7 +70,7 @@ func (p *slashCommandProvider) GetChildEntries(query string) ([]dialog.Completio
 		items[i] = &SlashCommandItem{
 			CompletionItem: dialog.CompletionItem{
 				Title: fmt.Sprintf("%s %s", comp.Icon, comp.Display),
-				Value: comp.Complete, // Use the complete text as value
+				Value: comp.Value, // Use the actual value, not the complete text
 			},
 			Description: comp.Description,
 			Complete:    comp.Complete,
@@ -85,6 +85,11 @@ type SlashCommandItem struct {
 	dialog.CompletionItem
 	Description string
 	Complete    string
+}
+
+// GetCompleteValue returns the complete command text for this item
+func (s *SlashCommandItem) GetCompleteValue() string {
+	return s.Complete
 }
 
 // Render customizes the display of slash command items
@@ -109,7 +114,7 @@ func (p *slashCommandProvider) HandleTabCompletion(input string) (string, []dial
 		items[i] = &SlashCommandItem{
 			CompletionItem: dialog.CompletionItem{
 				Title: fmt.Sprintf("%s %s", opt.Icon, opt.Display),
-				Value: opt.Complete,
+				Value: opt.Value,
 			},
 			Description: opt.Description,
 			Complete:    opt.Complete,

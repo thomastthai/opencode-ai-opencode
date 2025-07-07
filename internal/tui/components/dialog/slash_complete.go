@@ -33,8 +33,15 @@ func HandleSlashCommandCompletion(provider CompletionProvider, editorValue strin
 		)
 	}
 
-	// For slash commands, we use the complete value stored in the item
-	newValue := selectedItem.GetValue()
+	// For slash commands, check if this is a SlashCommandItem with complete value
+	var newValue string
+	if slashItem, ok := selectedItem.(interface{ GetCompleteValue() string }); ok {
+		// Use the complete command text
+		newValue = slashItem.GetCompleteValue()
+	} else {
+		// Fall back to the item value
+		newValue = selectedItem.GetValue()
+	}
 	
 	// Simple check to see if we should keep the dialog open
 	// Keep open if the value ends with a space (indicating more input expected)
