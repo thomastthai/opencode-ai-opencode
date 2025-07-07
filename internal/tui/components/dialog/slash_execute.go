@@ -78,6 +78,9 @@ func ExecuteSlashCommand(parser *commands.CommandParser, input string) tea.Cmd {
 		case strings.Contains(errMsg, "auth_status_requested"):
 			return util.CmdHandler(AuthStatusRequestedMsg{})
 			
+		case strings.Contains(errMsg, "config_show_requested"):
+			return util.CmdHandler(ConfigShowRequestedMsg{})
+			
 		case strings.Contains(errMsg, "config_model_requested"):
 			return util.CmdHandler(ConfigModelRequestedMsg{
 				Model: getArgOrDefault(cmd.Args, 0, ""),
@@ -133,6 +136,8 @@ type AuthLogoutRequestedMsg struct {
 }
 
 type AuthStatusRequestedMsg struct{}
+
+type ConfigShowRequestedMsg struct{}
 
 type ConfigModelRequestedMsg struct {
 	Model string

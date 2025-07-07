@@ -11,6 +11,8 @@ import (
 	"github.com/opencode-ai/opencode/internal/app"
 	"github.com/opencode-ai/opencode/internal/commands"
 	"github.com/opencode-ai/opencode/internal/completions"
+	"github.com/opencode-ai/opencode/internal/config"
+	"github.com/opencode-ai/opencode/internal/llm/models"
 	"github.com/opencode-ai/opencode/internal/message"
 	"github.com/opencode-ai/opencode/internal/session"
 	"github.com/opencode-ai/opencode/internal/tui/components/chat"
@@ -163,6 +165,24 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd != nil {
 			return p, cmd
 		}
+	case dialog.SessionListRequestedMsg:
+		// List all sessions
+		sessions, err := p.app.Sessions.List(context.Background())
+		if err != nil {
+			return p, util.ReportError(err)
+		}
+		if len(sessions) == 0 {
+			return p, util.ReportInfo("No sessions found")
+		}
+		// Format and display sessions
+		var sessionList strings.Builder
+		sessionList.WriteString("Sessions:\n")
+		for i, s := range sessions {
+			cost := fmt.Sprintf("$%.2f", s.Cost)
+			tokens := s.PromptTokens + s.CompletionTokens
+			sessionList.WriteString(fmt.Sprintf("%d. %s (Tokens: %d, Cost: %s)\n", i+1, s.Title, tokens, cost))
+		}
+		return p, util.ReportInfo(sessionList.String())
 	case dialog.SessionClearRequestedMsg:
 		// Clear the current session (same as Ctrl+N)
 		p.session = session.Session{}
@@ -189,6 +209,67 @@ If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (
 		if cmd != nil {
 			return p, cmd
 		}
+	case dialog.SessionNewRequestedMsg:
+		// Create a new session with optional name
+		sessionName := msg.Name
+		if sessionName == "" {
+			sessionName = "New Session"
+		}
+		newSession, err := p.app.Sessions.Create(context.Background(), sessionName)
+		if err != nil {
+			return p, util.ReportError(err)
+		}
+		p.session = newSession
+		return p, tea.Batch(
+			p.setSidebar(),
+			util.CmdHandler(chat.SessionSelectedMsg(newSession)),
+			util.ReportInfo(fmt.Sprintf("Created new session: %s", sessionName)),
+		)
+	case dialog.ConfigShowRequestedMsg:
+		// Show current configuration
+		cfg := config.Get()
+		if cfg == nil {
+			return p, util.ReportError(fmt.Errorf("unable to load configuration"))
+		}
+		
+		// Format configuration info
+		var configInfo strings.Builder
+		configInfo.WriteString("Current Configuration:\n\n")
+		
+		// Show agent models
+		configInfo.WriteString("Agent Models:\n")
+		for agentName, agent := range cfg.Agents {
+			model, ok := models.SupportedModels[agent.Model]
+			if ok {
+				configInfo.WriteString(fmt.Sprintf("  %s: %s (%s)\n", agentName, model.Name, model.ID))
+			} else {
+				configInfo.WriteString(fmt.Sprintf("  %s: %s\n", agentName, agent.Model))
+			}
+		}
+		
+		// Show enabled providers
+		configInfo.WriteString("\nEnabled Providers:\n")
+		for provider, providerCfg := range cfg.Providers {
+			if !providerCfg.Disabled {
+				configInfo.WriteString(fmt.Sprintf("  - %s\n", provider))
+			}
+		}
+		
+		// Show working directory
+		configInfo.WriteString(fmt.Sprintf("\nWorking Directory: %s\n", cfg.WorkingDir))
+		
+		// Show context paths
+		if len(cfg.ContextPaths) > 0 {
+			configInfo.WriteString("\nContext Paths:\n")
+			for _, path := range cfg.ContextPaths {
+				configInfo.WriteString(fmt.Sprintf("  - %s\n", path))
+			}
+		}
+		
+		return p, util.ReportInfo(configInfo.String())
+	case dialog.ConfigModelRequestedMsg:
+		// TODO: Implement model configuration
+		return p, util.ReportWarn("Model configuration not yet implemented")
 	case dialog.AuthLoginRequestedMsg:
 		// Handle OAuth2 login
 		switch msg.Provider {
@@ -199,6 +280,12 @@ If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (
 		default:
 			return p, util.ReportWarn(fmt.Sprintf("Unknown provider: %s", msg.Provider))
 		}
+	case dialog.AuthLogoutRequestedMsg:
+		// TODO: Implement auth logout
+		return p, util.ReportWarn("Auth logout not yet implemented")
+	case dialog.AuthStatusRequestedMsg:
+		// TODO: Implement auth status
+		return p, util.ReportWarn("Auth status not yet implemented")
 	case dialog.HelpRequestedMsg:
 		// Show help (toggle help dialog)
 		return p, func() tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}} }
