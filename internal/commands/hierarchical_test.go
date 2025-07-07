@@ -185,10 +185,11 @@ func TestHierarchicalRegistry(t *testing.T) {
 		
 		// Execute valid command
 		cmd := SlashCommand{
-			Raw:   "/test run arg1 arg2",
-			Topic: "test",
-			Command:  "run",
-			Args:  []string{"arg1", "arg2"},
+			Raw:     "/test run arg1 arg2",
+			Topic:   "test",
+			Command: "run",
+			Args:    []string{"arg1", "arg2"},
+			Options: NewParsedOptions(),
 		}
 		
 		err := registry.Execute(context.Background(), cmd)
@@ -210,8 +211,9 @@ func TestHierarchicalRegistry(t *testing.T) {
 		
 		// Non-existent command
 		cmd = SlashCommand{
-			Topic: "nonexistent",
-			Command:  "command",
+			Topic:   "nonexistent",
+			Command: "command",
+			Options: NewParsedOptions(),
 		}
 		err = registry.Execute(context.Background(), cmd)
 		assert.Error(t, err)

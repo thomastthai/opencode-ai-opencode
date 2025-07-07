@@ -9,11 +9,12 @@ import (
 
 // SlashCommand represents a parsed slash command with its components
 type SlashCommand struct {
-	Raw        string   // Original input (e.g., "/session new my-session")
-	Topic      string   // The topic/subject (e.g., "session")
-	Command    string   // The command (e.g., "new")
-	Args       []string // Additional arguments (e.g., ["my-session"])
-	Incomplete bool     // Whether the command is still being typed
+	Raw        string         // Original input (e.g., "/session new my-session")
+	Topic      string         // The topic/subject (e.g., "session")
+	Command    string         // The command (e.g., "new")
+	Args       []string       // Additional arguments (e.g., ["my-session"])
+	Options    *ParsedOptions // Parsed options/switches
+	Incomplete bool           // Whether the command is still being typed
 }
 
 // ParseState represents the current parsing context for completions
@@ -55,6 +56,7 @@ func NewCommandParserWithApp(registry *CommandRegistry, app *app.App) *CommandPa
 func (p *CommandParser) Parse(input string) SlashCommand {
 	result := SlashCommand{
 		Raw:        input,
+		Options:    NewParsedOptions(),
 		Incomplete: true,
 	}
 
@@ -84,9 +86,34 @@ func (p *CommandParser) Parse(input string) SlashCommand {
 	if len(parts) > 1 {
 		result.Command = parts[1]
 		
-		// Remaining parts are arguments
+		// Remaining parts are arguments and options
 		if len(parts) > 2 {
-			result.Args = parts[2:]
+			remainingArgs := parts[2:]
+			
+			// Parse options if we have a complete command
+			if result.Topic != "" && result.Command != "" {
+				// Get all applicable options for this command
+				allOptions := p.hierarchicalReg.GetAllOptions(result.Topic, result.Command)
+				
+				if len(allOptions) > 0 {
+					// Parse options from the remaining arguments
+					optParser := NewOptionParser(allOptions)
+					parsedOpts, err := optParser.ParseArgs(remainingArgs)
+					if err == nil {
+						result.Options = parsedOpts
+						result.Args = parsedOpts.GetPositional()
+					} else {
+						// If parsing fails, treat all as positional args
+						result.Args = remainingArgs
+					}
+				} else {
+					// No options defined, all are positional args
+					result.Args = remainingArgs
+				}
+			} else {
+				// Command not complete yet, treat all as args
+				result.Args = remainingArgs
+			}
 		}
 	}
 
@@ -202,13 +229,100 @@ func (p *CommandParser) getCommandCompletions(topic, partial string) []CommandCo
 
 // getArgCompletions returns completions for arguments
 func (p *CommandParser) getArgCompletions(topic, command string, args []string) []CommandCompletion {
-	// Use dynamic completions if app context is available
-	if p.app != nil {
-		return GetDynamicCompletions(topic, command, args, p.app)
+	completions := []CommandCompletion{}
+	
+	// Check if the last argument looks like an option prefix
+	if len(args) > 0 {
+		lastArg := args[len(args)-1]
+		if strings.HasPrefix(lastArg, "-") {
+			// Get option completions
+			options := p.hierarchicalReg.GetAllOptions(topic, command)
+			return p.getOptionCompletions(lastArg, options)
+		}
 	}
 	
-	// Return empty to indicate free-form input
-	return nil
+	// Use dynamic completions if app context is available
+	if p.app != nil {
+		dynamicCompletions := GetDynamicCompletions(topic, command, args, p.app)
+		completions = append(completions, dynamicCompletions...)
+	}
+	
+	// Also add option completions with -- prefix
+	options := p.hierarchicalReg.GetAllOptions(topic, command)
+	optionCompletions := p.getAllOptionCompletions(options)
+	completions = append(completions, optionCompletions...)
+	
+	return completions
+}
+
+// getOptionCompletions returns completions for options based on prefix
+func (p *CommandParser) getOptionCompletions(prefix string, options []*Option) []CommandCompletion {
+	completions := []CommandCompletion{}
+	
+	// Determine if it's long or short option
+	isLong := strings.HasPrefix(prefix, "--")
+	searchPrefix := strings.TrimLeft(prefix, "-")
+	
+	// Build a map to avoid duplicates
+	seen := make(map[string]bool)
+	
+	for _, opt := range options {
+		if opt.Hidden {
+			continue
+		}
+		
+		// Check long option
+		if (isLong || prefix == "-") && strings.HasPrefix(opt.Name, searchPrefix) {
+			if !seen[opt.Name] {
+				completions = append(completions, CommandCompletion{
+					Value:       "--" + opt.Name,
+					Display:     FormatOptionName(opt),
+					Description: opt.Description,
+					Complete:    "--" + opt.Name,
+				})
+				seen[opt.Name] = true
+			}
+		}
+		
+		// Check short option
+		if !isLong && opt.ShortName != "" && strings.HasPrefix(opt.ShortName, searchPrefix) {
+			if !seen[opt.ShortName] {
+				completions = append(completions, CommandCompletion{
+					Value:       "-" + opt.ShortName,
+					Display:     FormatOptionName(opt),
+					Description: opt.Description,
+					Complete:    "-" + opt.ShortName,
+				})
+				seen[opt.ShortName] = true
+			}
+		}
+	}
+	
+	return completions
+}
+
+// getAllOptionCompletions returns all available option completions
+func (p *CommandParser) getAllOptionCompletions(options []*Option) []CommandCompletion {
+	completions := []CommandCompletion{}
+	
+	// Build a map to avoid duplicates
+	seen := make(map[string]bool)
+	
+	for _, opt := range options {
+		if opt.Hidden || seen[opt.Name] {
+			continue
+		}
+		
+		completions = append(completions, CommandCompletion{
+			Value:       "--" + opt.Name,
+			Display:     FormatOptionName(opt),
+			Description: opt.Description,
+			Complete:    "--" + opt.Name,
+		})
+		seen[opt.Name] = true
+	}
+	
+	return completions
 }
 
 // GetTabCompletion returns the best completion for tab key

@@ -62,7 +62,16 @@ func TestCommandParserWithApp(t *testing.T) {
 		parsed := parser.Parse("/session switch ")
 		completions := parser.GetCompletions(parsed)
 		
-		// Should have no completions (returns nil for args without app)
-		assert.Nil(t, completions)
+		// Should have option completions even without app
+		assert.NotNil(t, completions)
+		// Check that we get at least the --verbose option from session topic
+		hasVerbose := false
+		for _, c := range completions {
+			if c.Value == "--verbose" {
+				hasVerbose = true
+				break
+			}
+		}
+		assert.True(t, hasVerbose, "Should have --verbose option")
 	})
 }

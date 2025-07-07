@@ -13,6 +13,7 @@ type Topic struct {
 	Description string
 	Icon        string
 	Commands    map[string]*HierCommand
+	Options     []*Option // Global options available for all commands in this topic
 }
 
 // HierCommand represents an action within a topic (e.g., new, list, delete)
@@ -21,9 +22,10 @@ type HierCommand struct {
 	Name        string
 	Description string
 	Handler     CommandHandler
-	ArgsHelp    string // Help text for arguments
+	ArgsHelp    string    // Help text for arguments
 	MinArgs     int
 	MaxArgs     int
+	Options     []*Option // Command-specific options
 }
 
 // HierarchicalRegistry manages commands in a topic/command structure
@@ -103,10 +105,17 @@ func (r *HierarchicalRegistry) Execute(ctx context.Context, cmd SlashCommand) er
 		return fmt.Errorf("too many arguments: expected at most %d, got %d", command.MaxArgs, len(cmd.Args))
 	}
 
+	// Validate options
+	allOptions := r.GetAllOptions(cmd.Topic, cmd.Command)
+	if err := cmd.Options.Validate(allOptions); err != nil {
+		return fmt.Errorf("option validation failed: %w", err)
+	}
+
 	// Convert args to map for handler
 	args := map[string]interface{}{
-		"args": cmd.Args,
-		"raw":  cmd.Raw,
+		"args":    cmd.Args,
+		"raw":     cmd.Raw,
+		"options": cmd.Options,
 	}
 
 	if command.Handler == nil {
@@ -135,6 +144,23 @@ func (r *HierarchicalRegistry) GetCompletionsForTopic(topicID string) []CommandC
 	return completions
 }
 
+// GetAllOptions returns all applicable options for a command (topic + command options)
+func (r *HierarchicalRegistry) GetAllOptions(topicID, commandID string) []*Option {
+	options := []*Option{}
+	
+	// Add topic-level options
+	if topic, exists := r.topics[topicID]; exists {
+		options = append(options, topic.Options...)
+	}
+	
+	// Add command-level options
+	if command, exists := r.GetCommand(topicID, commandID); exists {
+		options = append(options, command.Options...)
+	}
+	
+	return options
+}
+
 // InitializeBuiltinCommands sets up all built-in commands with the new structure
 func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 	// Session commands
@@ -143,6 +169,14 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 		Name:        "Session",
 		Description: "Manage chat sessions",
 		Icon:        "💬",
+		Options: []*Option{
+			{
+				Name:        "verbose",
+				ShortName:   "v",
+				Type:        OptionTypeBool,
+				Description: "Show detailed output",
+			},
+		},
 	}
 	registry.RegisterTopic(sessionTopic)
 
@@ -154,6 +188,20 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 		ArgsHelp:    "[name]",
 		MinArgs:     0,
 		MaxArgs:     1,
+		Options: []*Option{
+			{
+				Name:        "model",
+				ShortName:   "m",
+				Type:        OptionTypeString,
+				Description: "Specify the AI model to use",
+				Example:     "--model=gpt-4",
+			},
+			{
+				Name:        "system",
+				Type:        OptionTypeString,
+				Description: "Set system prompt for the session",
+			},
+		},
 	})
 
 	registry.RegisterCommand("session", &HierCommand{
@@ -163,6 +211,22 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 		Handler:     handleHierSessionList,
 		MinArgs:     0,
 		MaxArgs:     0,
+		Options: []*Option{
+			{
+				Name:        "format",
+				ShortName:   "f",
+				Type:        OptionTypeString,
+				Description: "Output format",
+				Choices:     []string{"table", "json", "csv"},
+				DefaultValue: "table",
+			},
+			{
+				Name:        "all",
+				ShortName:   "a",
+				Type:        OptionTypeBool,
+				Description: "Show all sessions including archived",
+			},
+		},
 	})
 
 	registry.RegisterCommand("session", &HierCommand{
@@ -210,6 +274,23 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 		ArgsHelp:    "[model-name]",
 		MinArgs:     0,
 		MaxArgs:     1,
+		Options: []*Option{
+			{
+				Name:        "global",
+				ShortName:   "g",
+				Type:        OptionTypeBool,
+				Description: "Set as global default model",
+			},
+			{
+				Name:        "temperature",
+				ShortName:   "t",
+				Type:        OptionTypeFloat,
+				Description: "Set model temperature",
+				MinValue:    0.0,
+				MaxValue:    2.0,
+				DefaultValue: 0.7,
+			},
+		},
 	})
 
 	// Project commands
@@ -247,6 +328,19 @@ func InitializeBuiltinCommands(registry *HierarchicalRegistry) error {
 		ArgsHelp:    "<provider>",
 		MinArgs:     1,
 		MaxArgs:     1,
+		Options: []*Option{
+			{
+				Name:        "force",
+				ShortName:   "f",
+				Type:        OptionTypeBool,
+				Description: "Force re-authentication even if already logged in",
+			},
+			{
+				Name:        "no-browser",
+				Type:        OptionTypeBool,
+				Description: "Don't open browser automatically",
+			},
+		},
 	})
 
 	registry.RegisterCommand("auth", &HierCommand{
