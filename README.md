@@ -625,26 +625,32 @@ Type `/` in the chat to activate slash commands with intelligent features:
 - The completion dialog stays open while building multi-part commands
 
 #### **Command Structure**
-Commands follow a consistent pattern: `/<topic> <verb> [args...]`
+Commands follow the familiar CLI pattern: `/<topic> <command> [options] [args...]`
 
-Where square brackets `[]` indicate optional components.
+Similar to tools like git, where:
+- **Topic**: The main subject area (like `git`)
+- **Command**: The specific action (like `branch`, `commit`, `remote`)
+- **Options**: Flags that modify behavior (coming soon)
+- **Args**: Command-specific arguments
 
-Examples showing the structure:
-- `/session list` - Topic + verb only
-- `/session new my-project` - Topic + verb + one arg
-- `/auth status` - Topic + verb only
-- `/auth login gemini` - Topic + verb + provider arg
-- `/config set editor.theme dark` - Topic + verb + two args (key and value)
-- `/file move old.txt new.txt` - Topic + verb + two args (source and destination)
+Examples:
+- `/session list` - List all sessions
+- `/session new my-project` - Create a new session named "my-project"
+- `/session delete abc123` - Delete session with ID abc123
+- `/auth login gemini` - Login to Gemini provider
+- `/auth status` - Show authentication status
+- `/config set editor.theme dark` - Set config value
+- `/file open main.go` - Open a file
 
-The system is flexible - verbs determine what arguments they expect:
-- Some verbs need no arguments (`/session list`)
-- Some need one argument (`/session switch abc123`)
-- Some need multiple arguments (`/config set key value`)
+Just like git has commands like `branch`, `remote`, `stash`, each topic in OpenCode has its set of commands:
+- **session**: `list`, `new`, `delete`, `switch`
+- **auth**: `login`, `logout`, `status`
+- **config**: `get`, `set`, `list`
+- **file**: `open`, `save`, `delete`
 
 #### **Tab Completion**
 - Press `Tab` to complete partial commands
-- Works at any level: topics, verbs, or arguments
+- Works at any level: topics, commands, or arguments
 - Context-aware completions for:
   - Session IDs from your active sessions
   - Model names from available providers
