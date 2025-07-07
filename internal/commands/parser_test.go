@@ -22,6 +22,7 @@ func TestCommandParser_Parse(t *testing.T) {
 				Topic:      "",
 				Command:       "",
 				Args:       nil,
+				Options:    NewParsedOptions(),
 				Incomplete: true,
 			},
 		},
@@ -33,6 +34,7 @@ func TestCommandParser_Parse(t *testing.T) {
 				Topic:      "session",
 				Command:       "",
 				Args:       nil,
+				Options:    NewParsedOptions(),
 				Incomplete: true,
 			},
 		},
@@ -44,6 +46,7 @@ func TestCommandParser_Parse(t *testing.T) {
 				Topic:      "session",
 				Command:       "",
 				Args:       nil,
+				Options:    NewParsedOptions(),
 				Incomplete: true,
 			},
 		},
@@ -55,6 +58,7 @@ func TestCommandParser_Parse(t *testing.T) {
 				Topic:      "session",
 				Command:       "new",
 				Args:       nil,
+				Options:    NewParsedOptions(),
 				Incomplete: true,
 			},
 		},
@@ -66,6 +70,7 @@ func TestCommandParser_Parse(t *testing.T) {
 				Topic:      "session",
 				Command:       "new",
 				Args:       nil,
+				Options:    NewParsedOptions(),
 				Incomplete: false,
 			},
 		},
@@ -77,6 +82,7 @@ func TestCommandParser_Parse(t *testing.T) {
 				Topic:      "session",
 				Command:       "new",
 				Args:       []string{"my-session"},
+				Options:    nil, // Will be initialized but with positional args
 				Incomplete: true,
 			},
 		},
@@ -88,6 +94,7 @@ func TestCommandParser_Parse(t *testing.T) {
 				Topic:      "session",
 				Command:       "compact",
 				Args:       []string{"focus", "on", "errors"},
+				Options:    nil, // Will be initialized but with positional args
 				Incomplete: true,
 			},
 		},
@@ -99,6 +106,7 @@ func TestCommandParser_Parse(t *testing.T) {
 				Topic:      "",
 				Command:       "",
 				Args:       nil,
+				Options:    NewParsedOptions(),
 				Incomplete: true,
 			},
 		},
@@ -107,6 +115,14 @@ func TestCommandParser_Parse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := parser.Parse(tt.input)
+			// For tests with args, we need to check the Options field separately
+			if tt.expected.Options == nil && len(tt.expected.Args) > 0 {
+				assert.NotNil(t, result.Options)
+				assert.Equal(t, tt.expected.Args, result.Options.GetPositional())
+				// Clear Options for comparison since the structure is complex
+				result.Options = nil
+				tt.expected.Options = nil
+			}
 			assert.Equal(t, tt.expected, result)
 		})
 	}
