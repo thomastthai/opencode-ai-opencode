@@ -51,7 +51,9 @@ func GetPersistentShell(workingDir string) *PersistentShell {
 
 	if shellInstance == nil {
 		shellInstance = newPersistentShell(workingDir)
-	} else if !shellInstance.isAlive {
+	} else if !shellInstance.isAlive || !shellInstance.isHealthy() {
+		// Shell is not alive or not healthy, restart it
+		shellInstance.Close()
 		shellInstance = newPersistentShell(shellInstance.cwd)
 	}
 
@@ -297,8 +299,53 @@ func (s *PersistentShell) Close() {
 
 	s.stdin.Write([]byte("exit\n"))
 
-	s.cmd.Process.Kill()
+	if s.cmd != nil && s.cmd.Process != nil {
+		s.cmd.Process.Kill()
+	}
 	s.isAlive = false
+}
+
+// isHealthy checks if the shell process is still healthy and responsive
+func (s *PersistentShell) isHealthy() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.isAlive || s.cmd == nil || s.cmd.Process == nil {
+		return false
+	}
+
+	// Check if the process is still running
+	if err := s.cmd.Process.Signal(syscall.Signal(0)); err != nil {
+		// Process is dead
+		s.isAlive = false
+		return false
+	}
+
+	// Try to write a simple test to stdin to check if pipes are working
+	if s.stdin != nil {
+		// Use a non-blocking write test
+		_, err := s.stdin.Write([]byte("# health check\n"))
+		if err != nil {
+			s.isAlive = false
+			return false
+		}
+	}
+
+	return true
+}
+
+// HealthCheck performs a more thorough health check by executing a simple command
+func (s *PersistentShell) HealthCheck(ctx context.Context) error {
+	if !s.isHealthy() {
+		return errors.New("shell is not healthy")
+	}
+
+	// Try to execute a simple command with a short timeout
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	_, _, _, _, err := s.Exec(ctxWithTimeout, "echo 'health_check'", 1000)
+	return err
 }
 
 func shellQuote(s string) string {

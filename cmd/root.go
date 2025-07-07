@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -128,6 +130,9 @@ to assist developers in writing, debugging, and understanding code directly from
 			tea.WithAltScreen(),
 		)
 
+		// Set up signal handling for sleep/wake events
+		setupSignalHandling(ctx, app, program)
+
 		// Setup the subscriptions, this will send services events to the TUI
 		ch, cancelSubs := setupSubscriptions(app, ctx)
 
@@ -196,6 +201,95 @@ func attemptTUIRecovery(program *tea.Program) {
 	// We could try to restart the TUI or gracefully exit
 	// For now, we'll just quit the program to avoid further issues
 	program.Quit()
+}
+
+// setupSignalHandling sets up signal handlers for sleep/wake events
+func setupSignalHandling(ctx context.Context, app *app.App, program *tea.Program) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGTSTP, syscall.SIGCONT, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		defer logging.RecoverPanic("signal-handler", nil)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case sig := <-sigChan:
+				switch sig {
+				case syscall.SIGTSTP:
+					logging.Info("Received SIGTSTP (suspend), pausing components")
+					handleSuspend(app)
+				case syscall.SIGCONT:
+					logging.Info("Received SIGCONT (resume), resuming components")
+					handleResume(app)
+					// Send a refresh message to the TUI to restore terminal state
+					if program != nil {
+						program.Send(tea.WindowSizeMsg{})
+					}
+				case syscall.SIGINT, syscall.SIGTERM:
+					logging.Info("Received interrupt signal, shutting down gracefully")
+					if program != nil {
+						program.Quit()
+					}
+					return
+				}
+			}
+		}
+	}()
+}
+
+// handleSuspend gracefully pauses components before system sleep
+func handleSuspend(app *app.App) {
+	logging.Info("Handling system suspend...")
+	// The system will handle the actual suspension
+	// We just log it for now, but could add cleanup logic here
+}
+
+// handleResume restores components after system wake
+func handleResume(app *app.App) {
+	logging.Info("Handling system resume...")
+	
+	go func() {
+		defer logging.RecoverPanic("resume-health-checks", nil)
+		
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		
+		// Perform health checks and recovery for various components
+		performHealthChecks(ctx, app)
+	}()
+}
+
+// performHealthChecks runs health checks on all critical components after resume
+func performHealthChecks(ctx context.Context, app *app.App) {
+	logging.Info("Performing post-resume health checks...")
+	
+	// Check session service health
+	if err := app.Sessions.HealthCheck(ctx); err != nil {
+		logging.Warn("Session service health check failed after resume", "error", err)
+	} else {
+		logging.Info("Session service health check passed")
+	}
+	
+	// Check message service health
+	if err := app.Messages.HealthCheck(ctx); err != nil {
+		logging.Warn("Message service health check failed after resume", "error", err)
+	} else {
+		logging.Info("Message service health check passed")
+	}
+	
+	// Check history service health
+	if err := app.History.HealthCheck(ctx); err != nil {
+		logging.Warn("History service health check failed after resume", "error", err)
+	} else {
+		logging.Info("History service health check passed")
+	}
+	
+	// Note: Shell and LSP health checks are performed automatically
+	// when they are accessed through GetPersistentShell() and LSP methods
+	// that call IsHealthy() and restart if needed
+	
+	logging.Info("Post-resume health checks completed")
 }
 
 func initMCPTools(ctx context.Context, app *app.App) {

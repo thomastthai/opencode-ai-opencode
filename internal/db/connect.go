@@ -1,10 +1,12 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
@@ -65,4 +67,39 @@ func Connect() (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to apply migrations: %w", err)
 	}
 	return db, nil
+}
+
+// IsHealthy checks if the database connection is still healthy
+func IsHealthy(db *sql.DB) bool {
+	if db == nil {
+		return false
+	}
+	
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	
+	return db.PingContext(ctx) == nil
+}
+
+// HealthCheck performs a comprehensive health check on the database
+func HealthCheck(db *sql.DB) error {
+	if !IsHealthy(db) {
+		return fmt.Errorf("database ping failed")
+	}
+	
+	// Test a simple query to ensure the database is responsive
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	
+	var result int
+	err := db.QueryRowContext(ctx, "SELECT 1").Scan(&result)
+	if err != nil {
+		return fmt.Errorf("database query test failed: %w", err)
+	}
+	
+	if result != 1 {
+		return fmt.Errorf("database query returned unexpected result: %d", result)
+	}
+	
+	return nil
 }

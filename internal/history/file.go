@@ -38,6 +38,7 @@ type Service interface {
 	Update(ctx context.Context, file File) (File, error)
 	Delete(ctx context.Context, id string) error
 	DeleteSessionFiles(ctx context.Context, sessionID string) error
+	HealthCheck(ctx context.Context) error
 }
 
 type service struct {
@@ -236,6 +237,27 @@ func (s *service) DeleteSessionFiles(ctx context.Context, sessionID string) erro
 			return err
 		}
 	}
+	return nil
+}
+
+func (s *service) HealthCheck(ctx context.Context) error {
+	// Test database connectivity by trying a simple query with timeout
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	
+	// Test both the querier and direct database connection
+	if s.db != nil {
+		if err := s.db.PingContext(ctxWithTimeout); err != nil {
+			return fmt.Errorf("database ping failed: %w", err)
+		}
+	}
+	
+	// Try a simple query to ensure the connection is working
+	_, err := s.q.ListFilesBySession(ctxWithTimeout, "health-check-test")
+	if err != nil {
+		return fmt.Errorf("database query test failed: %w", err)
+	}
+	
 	return nil
 }
 

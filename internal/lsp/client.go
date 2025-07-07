@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/opencode-ai/opencode/internal/config"
@@ -260,6 +261,67 @@ func (c *Client) Close() error {
 		}
 		return fmt.Errorf("process killed after timeout")
 	}
+}
+
+// IsHealthy checks if the LSP server process is still healthy
+func (c *Client) IsHealthy() bool {
+	if c.Cmd == nil || c.Cmd.Process == nil {
+		return false
+	}
+
+	// Check if the process is still running
+	if err := c.Cmd.Process.Signal(syscall.Signal(0)); err != nil {
+		c.SetServerState(StateError)
+		return false
+	}
+
+	// Check server state
+	state := c.GetServerState()
+	return state == StateReady
+}
+
+// HealthCheck performs a health check by sending a simple request
+func (c *Client) HealthCheck(ctx context.Context) error {
+	if !c.IsHealthy() {
+		return fmt.Errorf("LSP server is not healthy")
+	}
+
+	// Try a simple workspace/symbol request with timeout
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	serverType := c.detectServerType()
+	return c.pingServerByType(ctxWithTimeout, serverType)
+}
+
+// Restart attempts to restart the LSP server
+func (c *Client) Restart(ctx context.Context, command string, args ...string) error {
+	logging.Info("Restarting LSP server", "command", command)
+	
+	// Close the current client
+	if err := c.Close(); err != nil {
+		logging.Warn("Error closing LSP client during restart", "error", err)
+	}
+
+	// Create a new client
+	newClient, err := NewClient(ctx, command, args...)
+	if err != nil {
+		return fmt.Errorf("failed to create new LSP client: %w", err)
+	}
+
+	// Copy the old client's state to the new one
+	newClient.serverRequestHandlers = c.serverRequestHandlers
+	newClient.notificationHandlers = c.notificationHandlers
+
+	// Replace the current client's fields
+	c.Cmd = newClient.Cmd
+	c.stdin = newClient.stdin
+	c.stdout = newClient.stdout
+	c.stderr = newClient.stderr
+	c.SetServerState(StateStarting)
+
+	// Wait for server to be ready
+	return c.WaitForServerReady(ctx)
 }
 
 type ServerState int

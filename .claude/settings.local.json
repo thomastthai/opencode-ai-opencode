@@ -3,7 +3,10 @@
     "allow": [
       "Bash(go test:*)",
       "Bash(go build:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": []
   }

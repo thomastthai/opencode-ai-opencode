@@ -27,6 +27,7 @@ type Service interface {
 	List(ctx context.Context, sessionID string) ([]Message, error)
 	Delete(ctx context.Context, id string) error
 	DeleteSessionMessages(ctx context.Context, sessionID string) error
+	HealthCheck(ctx context.Context) error
 }
 
 type service struct {
@@ -142,6 +143,19 @@ func (s *service) List(ctx context.Context, sessionID string) ([]Message, error)
 		}
 	}
 	return messages, nil
+}
+
+func (s *service) HealthCheck(ctx context.Context) error {
+	// Test database connectivity by trying a simple query with timeout
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	
+	// Try to query a few messages to test the connection
+	_, err := s.q.ListMessagesBySession(ctxWithTimeout, "health-check-test")
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *service) fromDBItem(item db.Message) (Message, error) {

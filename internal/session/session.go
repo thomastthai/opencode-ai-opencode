@@ -31,6 +31,7 @@ type Service interface {
 	List(ctx context.Context) ([]Session, error)
 	Save(ctx context.Context, session Session) (Session, error)
 	Delete(ctx context.Context, id string) error
+	HealthCheck(ctx context.Context) error
 }
 
 type service struct {
@@ -130,6 +131,15 @@ func (s *service) List(ctx context.Context) ([]Session, error) {
 		sessions[i] = s.fromDBItem(dbSession)
 	}
 	return sessions, nil
+}
+
+func (s *service) HealthCheck(ctx context.Context) error {
+	// Test database connectivity by trying a simple query
+	_, err := s.q.ListSessions(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s service) fromDBItem(item db.Session) Session {
