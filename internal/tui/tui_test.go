@@ -6,14 +6,15 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/opencode-ai/opencode/internal/app"
 	"github.com/opencode-ai/opencode/internal/commands"
+	"github.com/opencode-ai/opencode/internal/recovery"
 	"github.com/opencode-ai/opencode/internal/tui/command"
 	"github.com/opencode-ai/opencode/internal/tui/components/dialog"
 )
 
 func TestTUIModelCreation(t *testing.T) {
-	// Create a test app (simplified)
+	// Create a test app with required services
 	testApp := &app.App{
-		// Add minimal required fields for testing
+		Recovery: recovery.NewService(),
 	}
 	
 	// Create a new TUI model  
@@ -191,7 +192,10 @@ func TestDetermineCommandScope(t *testing.T) {
 
 
 func TestWindowSizeMsg(t *testing.T) {
-	testApp := &app.App{}
+	// Create a test app with initialized services to prevent nil pointer dereference
+	testApp := &app.App{
+		Recovery: recovery.NewService(),
+	}
 	model := New(testApp)
 	
 	// Test window size message handling
