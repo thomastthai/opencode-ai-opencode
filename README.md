@@ -627,13 +627,21 @@ Type `/` in the chat to activate slash commands with intelligent features:
 #### **Command Structure**
 Commands follow a consistent pattern: `/<topic> <verb> [sub-command] [args...]`
 
-Examples:
-- `/session list` - List all sessions (topic: session, verb: list)
-- `/session new my-project` - Create a new session (topic: session, verb: new, args: my-project)
-- `/auth login gemini` - Login to Gemini provider (topic: auth, verb: login, sub-command: gemini)
-- `/auth logout gemini` - Logout from Gemini (topic: auth, verb: logout, sub-command: gemini)
-- `/file open main.go` - Open a file (topic: file, verb: open, args: main.go)
-- `/model select gpt-4o` - Select a model (topic: model, verb: select, args: gpt-4o)
+Where square brackets `[]` indicate optional components.
+
+Examples showing the structure:
+- `/session list` - No sub-command or args
+- `/session new my-project` - No sub-command, but has args
+- `/auth status` - Just topic and verb
+- `/auth login gemini` - Has sub-command (gemini) but no additional args
+- `/config set editor.theme dark` - Has sub-command (editor.theme) and args (dark)
+
+Breaking down a complex example:
+- `/config set editor.theme dark`
+  - Topic: `config`
+  - Verb: `set`
+  - Sub-command: `editor.theme` (the setting to modify)
+  - Args: `dark` (the value to set)
 
 #### **Tab Completion**
 - Press `Tab` to complete partial commands
