@@ -529,8 +529,12 @@ func (a *agent) processEvent(ctx context.Context, sessionID string, assistantMsg
 			logging.InfoPersist(fmt.Sprintf("Event processing canceled for session: %s", sessionID))
 			return context.Canceled
 		}
-		logging.ErrorPersist(event.Error.Error())
-		return event.Error
+		if event.Error != nil {
+			logging.ErrorPersist(event.Error.Error())
+			return event.Error
+		}
+		logging.ErrorPersist("Unknown error occurred during event processing")
+		return fmt.Errorf("unknown error occurred during event processing")
 	case provider.EventComplete:
 		assistantMsg.SetToolCalls(event.Response.ToolCalls)
 		assistantMsg.AddFinish(event.Response.FinishReason)

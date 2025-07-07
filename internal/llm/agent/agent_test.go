@@ -60,6 +60,11 @@ func (m *MockSessionService) Subscribe(ctx context.Context) <-chan pubsub.Event[
 	return args.Get(0).(<-chan pubsub.Event[session.Session])
 }
 
+func (m *MockSessionService) HealthCheck(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
 type MockMessageService struct {
 	mock.Mock
 }
@@ -97,6 +102,11 @@ func (m *MockMessageService) DeleteSessionMessages(ctx context.Context, sessionI
 func (m *MockMessageService) Subscribe(ctx context.Context) <-chan pubsub.Event[message.Message] {
 	args := m.Called(ctx)
 	return args.Get(0).(<-chan pubsub.Event[message.Message])
+}
+
+func (m *MockMessageService) HealthCheck(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
 }
 
 type MockTool struct {
