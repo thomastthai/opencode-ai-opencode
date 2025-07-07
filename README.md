@@ -625,23 +625,22 @@ Type `/` in the chat to activate slash commands with intelligent features:
 - The completion dialog stays open while building multi-part commands
 
 #### **Command Structure**
-Commands follow a consistent pattern: `/<topic> <verb> [sub-command] [args...]`
+Commands follow a consistent pattern: `/<topic> <verb> [args...]`
 
 Where square brackets `[]` indicate optional components.
 
 Examples showing the structure:
-- `/session list` - No sub-command or args
-- `/session new my-project` - No sub-command, but has args
-- `/auth status` - Just topic and verb
-- `/auth login gemini` - Has sub-command (gemini) but no additional args
-- `/config set editor.theme dark` - Has sub-command (editor.theme) and args (dark)
+- `/session list` - Topic + verb only
+- `/session new my-project` - Topic + verb + one arg
+- `/auth status` - Topic + verb only
+- `/auth login gemini` - Topic + verb + provider arg
+- `/config set editor.theme dark` - Topic + verb + two args (key and value)
+- `/file move old.txt new.txt` - Topic + verb + two args (source and destination)
 
-Breaking down a complex example:
-- `/config set editor.theme dark`
-  - Topic: `config`
-  - Verb: `set`
-  - Sub-command: `editor.theme` (the setting to modify)
-  - Args: `dark` (the value to set)
+The system is flexible - verbs determine what arguments they expect:
+- Some verbs need no arguments (`/session list`)
+- Some need one argument (`/session switch abc123`)
+- Some need multiple arguments (`/config set key value`)
 
 #### **Tab Completion**
 - Press `Tab` to complete partial commands
