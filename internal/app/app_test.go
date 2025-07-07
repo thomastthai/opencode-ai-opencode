@@ -61,6 +61,11 @@ func (m *mockSessionService) Subscribe(ctx context.Context) <-chan pubsub.Event[
 	return args.Get(0).(<-chan pubsub.Event[session.Session])
 }
 
+func (m *mockSessionService) HealthCheck(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
 type mockAgentService struct {
 	mock.Mock
 }
