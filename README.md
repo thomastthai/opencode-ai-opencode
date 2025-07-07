@@ -614,6 +614,38 @@ OpenCode is built with a modular architecture:
 
 OpenCode features a powerful slash command interface that provides quick access to both built-in commands and custom user-defined commands.
 
+### Slash Command Input
+
+Type `/` in the chat to activate slash commands with intelligent features:
+
+#### **Progressive Command Building**
+- Start typing a command like `/session` to see available verbs
+- Continue with `/session list` to execute or see subcommands
+- Tab completion guides you through the command structure
+- The completion dialog stays open while building multi-part commands
+
+#### **Command Structure**
+Commands follow a consistent pattern: `/<topic> <verb> [args]`
+
+Examples:
+- `/session list` - List all sessions
+- `/session new my-project` - Create a new session
+- `/auth login gemini` - Login to Gemini provider
+- `/file open main.go` - Open a file
+
+#### **Tab Completion**
+- Press `Tab` to complete partial commands
+- Works at any level: topics, verbs, or arguments
+- Context-aware completions for:
+  - Session IDs from your active sessions
+  - Model names from available providers
+  - File paths from your project
+
+#### **Live Command Reloading**
+- Custom commands are automatically reloaded when files change
+- Add or modify commands without restarting OpenCode
+- File watcher monitors all command directories
+
 ### Built-in Commands
 
 OpenCode includes essential built-in commands that are available immediately:
@@ -626,6 +658,10 @@ OpenCode includes essential built-in commands that are available immediately:
 | `/list` | `/ls`, `/commands` | List all available commands |
 | `/init` | | Initialize project with OpenCode.md memory file |
 | `/compact` | `/summary` | Summarize current session and create new one |
+| `/session` | | Session management commands |
+| `/auth` | | Authentication commands |
+| `/file` | | File operation commands |
+| `/model` | | Model selection commands |
 
 ### Command Palette Features
 
@@ -641,6 +677,11 @@ Access the enhanced command palette with `Ctrl+K`:
 - Real-time filtering as you type
 - Search across command names, descriptions, aliases, and categories
 - Press `Esc` to clear search or exit search mode
+
+#### **Vim Navigation**
+- Use `j/k` keys to navigate up and down
+- Arrow keys continue to work as expected
+- Consistent with other OpenCode dialogs
 
 #### **Recently Used**
 - Commands automatically track usage frequency
