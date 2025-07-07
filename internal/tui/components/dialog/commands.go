@@ -90,6 +90,7 @@ type commandDialogCmp struct {
 	groups          []CommandGroup
 	showSearch      bool
 	searchQuery     string
+	watcher         *CommandWatcher
 }
 
 type commandKeyMap struct {
@@ -124,7 +125,17 @@ func (c *commandDialogCmp) Init() tea.Cmd {
 	c.searchInput.Placeholder = "Search commands..."
 	c.searchInput.CharLimit = 50
 	
-	return c.listView.Init()
+	var cmds []tea.Cmd
+	cmds = append(cmds, c.listView.Init())
+	
+	// Initialize and start command watcher
+	watcher, err := NewCommandWatcher()
+	if err == nil {
+		c.watcher = watcher
+		cmds = append(cmds, watcher.Start())
+	}
+	
+	return tea.Batch(cmds...)
 }
 
 func (c *commandDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -179,6 +190,10 @@ func (c *commandDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					})
 				}
 			case key.Matches(msg, commandKeys.Escape):
+				// Stop watcher before closing
+				if c.watcher != nil {
+					c.watcher.Stop()
+				}
 				return c, util.CmdHandler(CloseCommandDialogMsg{})
 			case key.Matches(msg, commandKeys.Search):
 				// Enter search mode
@@ -197,6 +212,27 @@ func (c *commandDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		c.width = msg.Width
 		c.height = msg.Height
+		
+	case CommandsReloadedMsg:
+		// Handle command reload
+		if msg.Error != nil {
+			// Log error but continue with existing commands
+			return c, nil
+		}
+		
+		// Convert custom commands to command.Command format
+		customCommands := make([]command.Command, 0, len(msg.Commands))
+		for _, cmd := range msg.Commands {
+			customCommands = append(customCommands, command.Command(cmd))
+		}
+		
+		// Merge with built-in commands
+		allCommands := append(c.getBuiltInCommands(), customCommands...)
+		c.SetCommands(allCommands)
+		
+		// Refresh the view
+		c.updateFilteredCommands()
+		return c, nil
 	}
 
 	// Update list view only if not in search mode
@@ -417,6 +453,17 @@ func (c *commandDialogCmp) BindingKeys() []key.Binding {
 func (c *commandDialogCmp) SetCommands(commands []command.Command) {
 	c.commands = commands
 	c.updateFilteredCommands()
+}
+
+// getBuiltInCommands retrieves built-in commands from the current command list
+func (c *commandDialogCmp) getBuiltInCommands() []command.Command {
+	var builtInCommands []command.Command
+	for _, cmd := range c.commands {
+		if cmd.Scope == command.BuiltinScope {
+			builtInCommands = append(builtInCommands, cmd)
+		}
+	}
+	return builtInCommands
 }
 
 // NewCommandDialogCmp creates a new command selection dialog
