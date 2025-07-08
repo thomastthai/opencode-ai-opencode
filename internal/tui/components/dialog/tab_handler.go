@@ -11,6 +11,12 @@ type TabHandler interface {
 	HandleTabCompletion(input string) (string, []CompletionItemI, error)
 }
 
+// TabCompletionStartedMsg indicates tab completion has started
+type TabCompletionStartedMsg struct {
+	CurrentValue string
+	TargetValue  string
+}
+
 // HandleTabKey handles tab key press in the completion dialog
 func HandleTabKey(c *completionDialogCmp) tea.Cmd {
 	if c.completionProvider.GetId() != "slash-commands" {
@@ -32,15 +38,23 @@ func HandleTabKey(c *completionDialogCmp) tea.Cmd {
 		
 		if options == nil {
 			// Single match - complete it
-			
-			return func() tea.Msg {
-				return SlashCommandCompleteMsg{
-					OriginalValue: input,
-					NewValue:      completed,
-					CursorPos:     len(completed),
-					KeepOpen:      true, // Keep open for further completions
-				}
-			}
+			// Send both messages in sequence to track completion state
+			return tea.Sequence(
+				func() tea.Msg {
+					return TabCompletionStartedMsg{
+						CurrentValue: input,
+						TargetValue:  completed,
+					}
+				},
+				func() tea.Msg {
+					return SlashCommandCompleteMsg{
+						OriginalValue: input,
+						NewValue:      completed,
+						CursorPos:     len(completed),
+						KeepOpen:      true, // Keep open for further completions
+					}
+				},
+			)
 		}
 		
 		// Multiple matches - update the list

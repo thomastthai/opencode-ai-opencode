@@ -13,6 +13,7 @@ import (
 	"github.com/opencode-ai/opencode/internal/completions"
 	"github.com/opencode-ai/opencode/internal/config"
 	"github.com/opencode-ai/opencode/internal/llm/models"
+	"github.com/opencode-ai/opencode/internal/logging"
 	"github.com/opencode-ai/opencode/internal/message"
 	"github.com/opencode-ai/opencode/internal/session"
 	"github.com/opencode-ai/opencode/internal/tui/components/chat"
@@ -27,6 +28,14 @@ var ChatPage PageID = "chat"
 // CompactSessionRequestMsg is sent to trigger session compacting
 type CompactSessionRequestMsg struct{}
 
+// CompletionState tracks the state of tab completion
+type CompletionState int
+
+const (
+	CompletionStateIdle CompletionState = iota
+	CompletionStatePending
+)
+
 type chatPage struct {
 	app                     *app.App
 	editor               *chat.EditorCmp
@@ -38,6 +47,10 @@ type chatPage struct {
 	recoveryDialog          *recoveryDialog.RecoveryDialog
 	fileCompletionProvider  dialog.CompletionProvider
 	commandCompletionProvider dialog.CompletionProvider
+	
+	// Tab completion state tracking
+	completionState    CompletionState
+	pendingCompletion  string // The value we're waiting to complete to
 }
 
 type ChatKeyMap struct {
@@ -103,6 +116,19 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Check the editor's value to determine completion state.
 	editorValue := p.editor.GetValue()
+	
+	// If we're waiting for a completion but the editor value changed unexpectedly, cancel the pending completion
+	if p.completionState == CompletionStatePending && editorValue != p.pendingCompletion {
+		// Check if the editor value is a prefix of what we're waiting for (user is still typing)
+		if !strings.HasPrefix(p.pendingCompletion, editorValue) {
+			// User typed something different, cancel pending completion
+			logging.Debug("[chatPage] Canceling pending completion - user typed something different", 
+				"expected", p.pendingCompletion, "actual", editorValue)
+			p.completionState = CompletionStateIdle
+			p.pendingCompletion = ""
+		}
+	}
+	
 	if strings.HasPrefix(editorValue, "/") {
 		// Only set provider if dialog is not already showing or provider needs to change
 		if !p.showCompletionDialog || p.completionDialog.GetId() != "slash-commands" {
@@ -127,17 +153,38 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case dialog.CompletionDialogCloseMsg:
 		p.showCompletionDialog = false
+		// Reset completion state when dialog closes
+		p.completionState = CompletionStateIdle
+		p.pendingCompletion = ""
+	case dialog.TabCompletionStartedMsg:
+		// Mark that we're waiting for a tab completion
+		p.completionState = CompletionStatePending
+		p.pendingCompletion = msg.TargetValue
+		logging.Debug("[chatPage] Tab completion started", "current", msg.CurrentValue, "target", msg.TargetValue)
 	case dialog.SlashCommandCompleteMsg:
 		// Forward to editor to update text
 		updated, cmd := p.editor.Update(msg)
 		p.editor = updated.(*chat.EditorCmp)
 		cmds = append(cmds, cmd)
 		
+		// Reset completion state now that it's complete
+		p.completionState = CompletionStateIdle
+		p.pendingCompletion = ""
+		
 		// Keep dialog open if needed
 		if !msg.KeepOpen {
 			p.showCompletionDialog = false
 		}
 	case dialog.SlashCommandExecuteMsg:
+		// Check if we're waiting for a tab completion
+		if p.completionState == CompletionStatePending {
+			// Don't execute yet - we're waiting for tab completion to finish
+			logging.Debug("[chatPage] Ignoring slash command execution - tab completion pending", 
+				"command", msg.Raw, "waiting_for", p.pendingCompletion)
+			// The command will be executed when the user presses Enter again after completion
+			return p, tea.Batch(cmds...)
+		}
+		
 		// Close completion dialog
 		p.showCompletionDialog = false
 		
