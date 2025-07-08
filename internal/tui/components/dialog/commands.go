@@ -30,39 +30,125 @@ func (ci Command) Render(selected bool, width int) string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.BaseStyle()
 
-	descStyle := baseStyle.Width(width-4).Foreground(t.TextMuted())
+	// Single line style for "Command - Description" format
 	itemStyle := baseStyle.Width(width-4).
 		Foreground(t.Text()).
-		Background(t.Background())
+		Background(t.Background()).
+		Padding(0, 1)
 
 	if selected {
 		itemStyle = itemStyle.
 			Background(t.Primary()).
 			Foreground(t.Background()).
 			Bold(true)
-		descStyle = descStyle.
-			Background(t.Primary()).
-			Foreground(t.Background())
 	}
 
 	// Get command from underlying command.Command
 	cmd := command.Command(ci)
 	
-	// Create title with icon
-	titleText := fmt.Sprintf("%s %s", cmd.GetIcon(), ci.Title)
+	// Get emoji based on command type/category
+	emoji := getCommandEmoji(ci)
 	
-	// Add aliases if any
-	if len(cmd.Aliases) > 0 {
-		titleText += fmt.Sprintf(" (%s)", strings.Join(cmd.Aliases, ", "))
-	}
-	
-	title := itemStyle.Padding(0, 1).Render(titleText)
-	
+	// Format as "emoji Command - Description"
+	var text string
 	if ci.Description != "" {
-		description := descStyle.Padding(0, 1).Render(ci.Description)
-		return lipgloss.JoinVertical(lipgloss.Left, title, description)
+		// Command name style
+		cmdStyle := lipgloss.NewStyle().Bold(true)
+		if selected {
+			cmdStyle = cmdStyle.Foreground(t.Background())
+		} else {
+			cmdStyle = cmdStyle.Foreground(t.Primary())
+		}
+		
+		// Description style
+		descStyle := lipgloss.NewStyle()
+		if selected {
+			descStyle = descStyle.Foreground(t.Background())
+		} else {
+			descStyle = descStyle.Foreground(t.TextMuted())
+		}
+		
+		text = fmt.Sprintf("%s %s - %s", emoji, cmdStyle.Render(ci.Title), descStyle.Render(ci.Description))
+		
+		// Add aliases if any
+		if len(cmd.Aliases) > 0 {
+			aliasText := fmt.Sprintf(" (%s)", strings.Join(cmd.Aliases, ", "))
+			text += descStyle.Render(aliasText)
+		}
+	} else {
+		text = fmt.Sprintf("%s %s", emoji, ci.Title)
 	}
-	return title
+	
+	return itemStyle.Render(text)
+}
+
+// getCommandEmoji returns an appropriate emoji for the command based on its type
+func getCommandEmoji(cmd Command) string {
+	// Check for specific command patterns
+	title := strings.ToLower(cmd.Title)
+	
+	// System/built-in commands
+	if strings.HasPrefix(title, "/system") {
+		return "🤖"
+	}
+	
+	// Session commands
+	if strings.HasPrefix(title, "/session") {
+		return "💬"
+	}
+	
+	// File commands
+	if strings.HasPrefix(title, "/file") || strings.HasPrefix(title, "@") {
+		return "📄"
+	}
+	
+	// Project commands
+	if strings.HasPrefix(title, "/project") {
+		return "📁"
+	}
+	
+	// Config commands
+	if strings.HasPrefix(title, "/config") {
+		return "⚙️"
+	}
+	
+	// Auth commands
+	if strings.HasPrefix(title, "/auth") {
+		return "🔐"
+	}
+	
+	// Help command
+	if strings.HasPrefix(title, "/help") {
+		return "❓"
+	}
+	
+	// Git commands (custom)
+	if strings.Contains(title, "git") || command.Command(cmd).Category == "git" {
+		return "🌿"
+	}
+	
+	// Test commands (custom)
+	if strings.Contains(title, "test") || command.Command(cmd).Category == "testing" {
+		return "🧪"
+	}
+	
+	// Build/deployment commands (custom)
+	if strings.Contains(title, "build") || strings.Contains(title, "deploy") || command.Command(cmd).Category == "deployment" {
+		return "🚀"
+	}
+	
+	// Default based on scope
+	c := command.Command(cmd)
+	switch c.Scope {
+	case command.BuiltinScope:
+		return "⚡"
+	case command.UserScope:
+		return "👤"
+	case command.ProjectScope:
+		return "📋"
+	default:
+		return "•"
+	}
 }
 
 // CommandSelectedMsg is sent when a command is selected
@@ -72,6 +158,9 @@ type CommandSelectedMsg struct {
 
 // CloseCommandDialogMsg is sent when the command dialog is closed
 type CloseCommandDialogMsg struct{}
+
+// ShowCommandDialogMsg is sent to request showing the command dialog
+type ShowCommandDialogMsg struct{}
 
 // CommandDialog interface for the command selection dialog
 type CommandDialog interface {
@@ -297,21 +386,24 @@ func (c *commandDialogCmp) View() string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.BaseStyle()
 
-	maxWidth := 50
+	maxWidth := 80  // Start with a reasonable width for "Command - Description" format
 
 	// Calculate max width based on commands
 	commands := c.listView.GetItems()
 	for _, cmd := range commands {
-		titleWidth := len(fmt.Sprintf("%s %s", command.Command(cmd).GetIcon(), cmd.Title))
-		if len(command.Command(cmd).Aliases) > 0 {
-			titleWidth += len(fmt.Sprintf(" (%s)", strings.Join(command.Command(cmd).Aliases, ", ")))
-		}
-		if titleWidth > maxWidth-6 {
-			maxWidth = titleWidth + 6
-		}
+		// Calculate full line width: "emoji Command - Description (aliases)"
+		lineWidth := 3 // emoji + spaces
+		lineWidth += len(cmd.Title)
 		if cmd.Description != "" {
-			if len(cmd.Description) > maxWidth-6 {
-				maxWidth = len(cmd.Description) + 6
+			lineWidth += 3 + len(cmd.Description) // " - " + description
+		}
+		if len(command.Command(cmd).Aliases) > 0 {
+			lineWidth += len(fmt.Sprintf(" (%s)", strings.Join(command.Command(cmd).Aliases, ", ")))
+		}
+		if lineWidth > maxWidth-6 {
+			maxWidth = lineWidth + 6
+			if maxWidth > 120 {
+				maxWidth = 120 // Cap at 120 chars
 			}
 		}
 	}
@@ -470,7 +562,7 @@ func (c *commandDialogCmp) getBuiltInCommands() []command.Command {
 func NewCommandDialogCmp() CommandDialog {
 	listView := utilComponents.NewSimpleList[Command](
 		[]Command{},
-		15, // Increased height for better display
+		20, // Height for single-line command display
 		"No commands available",
 		true,
 	)

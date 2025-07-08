@@ -264,6 +264,11 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.showCommandDialog = false
 		return a, nil
 
+	case dialog.ShowCommandDialogMsg:
+		a.showCommandDialog = true
+		a.commandDialog.SetCommands(a.commands)
+		return a, nil
+
 	case dialog.OAuth2DialogMsg:
 		if a.showOAuth2Dialog {
 			oauth2, cmd := a.oauth2Dialog.Update(msg)

@@ -202,7 +202,7 @@ func TestTabCompletionForCompleteCommands(t *testing.T) {
 	}
 }
 
-// TestHelpCommandExecution verifies help command shows output
+// TestHelpCommandExecution verifies help command shows command dialog
 func TestHelpCommandExecution(t *testing.T) {
 	// Create test app
 	testApp := createTestApp(t)
@@ -220,14 +220,15 @@ func TestHelpCommandExecution(t *testing.T) {
 	// Verify model is returned
 	assert.NotNil(t, model)
 	
-	// Verify command is returned (ReportInfo with help text)
-	assert.NotNil(t, cmd, "Help command should return a command to display help text")
+	// Verify command is returned
+	assert.NotNil(t, cmd, "Help command should return a command")
 	
 	// Execute the command to get the message
 	if cmd != nil {
 		msg := cmd()
-		// The ReportInfo command should produce a message
-		assert.NotNil(t, msg, "Help command should produce a message")
+		// Should produce ShowCommandDialogMsg
+		_, ok := msg.(dialog.ShowCommandDialogMsg)
+		assert.True(t, ok, "Help command should produce ShowCommandDialogMsg")
 	}
 }
 

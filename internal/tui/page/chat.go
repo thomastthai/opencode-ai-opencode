@@ -357,22 +357,11 @@ If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (
 		// Show help message
 		logging.Debug("[chatPage] HelpRequestedMsg received", "topic", msg.Topic)
 		
-		helpText := `Available Commands:
-  /help              - Show this help message
-  /session new       - Create a new session
-  /session list      - List all sessions
-  /session clear     - Clear current session
-  /session compact   - Compact session history
-  /file list         - List files in context
-  /file add          - Add file to context
-  /file remove       - Remove file from context
-  /project init      - Initialize project with CLAUDE.md
-  /system help       - Show system help
-  /system exit       - Exit application
-  
-Use Tab for command completion.`
-		
-		return p, util.ReportInfo(helpText)
+		// Instead of showing help in status bar, trigger the command dialog
+		// which provides a better interface for browsing available commands
+		return p, func() tea.Msg {
+			return dialog.ShowCommandDialogMsg{}
+		}
 	case dialog.SessionSelectedMsg:
 		// Convert dialog.SessionSelectedMsg to chat.SessionSelectedMsg
 		return p, func() tea.Msg {
