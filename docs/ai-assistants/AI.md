@@ -31,7 +31,9 @@ go fmt ./...                            # Format code
 
 ## Architecture Overview
 
-**IMPORTANT**: Refer to [ARCHITECTURE.md](./docs/development/ARCHITECTURE.md) for detailed architecture patterns and coding principles that must be followed when writing code.
+**IMPORTANT**: Refer to [ARCHITECTURE.md](../development/ARCHITECTURE.md) for detailed architecture patterns and coding principles that must be followed when writing code.
+
+**DEBUGGING**: When troubleshooting issues, follow the systematic debugging approach documented in [DEBUGGING.md](../development/DEBUGGING.md).
 
 OpenCode is a terminal-based AI assistant built with Go, featuring:
 

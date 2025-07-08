@@ -166,6 +166,14 @@ func (m *EditorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.SlashCommandCompleteMsg:
 		// Handle progressive slash command completion
 		logging.Debug("[EditorCmp] SlashCommandCompleteMsg received:", "originalValue", msg.OriginalValue, "newValue", msg.NewValue, "currentValue", m.textarea.Value())
+		
+		// Log to file
+		debugLog := fmt.Sprintf("[EditorCmp] SlashCommandCompleteMsg: current=%q, setting to=%q\n", m.textarea.Value(), msg.NewValue)
+		if f, err := os.OpenFile("/tmp/opencode-tab-debug.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644); err == nil {
+			f.WriteString(debugLog)
+			f.Close()
+		}
+		
 		m.textarea.SetValue(msg.NewValue)
 		m.textarea.SetCursor(msg.CursorPos)
 		

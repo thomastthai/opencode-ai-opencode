@@ -1,6 +1,8 @@
 package dialog
 
 import (
+	"fmt"
+	"os"
 	"strings"
 	
 	"github.com/charmbracelet/bubbles/key"
@@ -95,6 +97,14 @@ func UpdateCompletionDialogForSlashCommands(c *completionDialogCmp, msg tea.Msg)
 	case SlashCommandCompleteMsg:
 		// Update the search text area with the new value
 		logging.Debug("[slash_complete] SlashCommandCompleteMsg received:", "newValue", msg.NewValue, "currentValue", c.pseudoSearchTextArea.Value())
+		
+		// Log to file for debugging
+		debugLog := fmt.Sprintf("[slash_complete] Before SetValue: current=%q, setting to=%q\n", c.pseudoSearchTextArea.Value(), msg.NewValue)
+		if f, err := os.OpenFile("/tmp/opencode-tab-debug.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644); err == nil {
+			f.WriteString(debugLog)
+			f.Close()
+		}
+		
 		c.pseudoSearchTextArea.SetValue(msg.NewValue)
 		c.query = msg.NewValue
 		
