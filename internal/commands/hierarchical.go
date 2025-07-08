@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -81,12 +82,18 @@ func (r *HierarchicalRegistry) GetCommand(topicID, commandID string) (*HierComma
 	return command, exists
 }
 
-// ListTopics returns all registered topics
+// ListTopics returns all registered topics sorted alphabetically by ID
 func (r *HierarchicalRegistry) ListTopics() []*Topic {
 	topics := make([]*Topic, 0, len(r.topics))
 	for _, topic := range r.topics {
 		topics = append(topics, topic)
 	}
+	
+	// Sort topics alphabetically by ID
+	sort.Slice(topics, func(i, j int) bool {
+		return topics[i].ID < topics[j].ID
+	})
+	
 	return topics
 }
 

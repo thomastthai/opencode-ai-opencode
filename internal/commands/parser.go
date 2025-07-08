@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/opencode-ai/opencode/internal/app"
@@ -210,8 +211,8 @@ func (p *CommandParser) getCommandCompletions(topic, partial string) []CommandCo
 		return nil
 	}
 	
-	completions := make([]CommandCompletion, 0, len(topicObj.Commands))
-	
+	// First collect all commands
+	var commands []*HierCommand
 	for _, command := range topicObj.Commands {
 		// Skip empty command (used for special cases like /help)
 		if command.ID == "" && topic != "help" {
@@ -223,6 +224,17 @@ func (p *CommandParser) getCommandCompletions(topic, partial string) []CommandCo
 			continue
 		}
 		
+		commands = append(commands, command)
+	}
+	
+	// Sort commands alphabetically by ID
+	sort.Slice(commands, func(i, j int) bool {
+		return commands[i].ID < commands[j].ID
+	})
+	
+	// Now build completions from sorted commands
+	completions := make([]CommandCompletion, 0, len(commands))
+	for _, command := range commands {
 		completion := CommandCompletion{
 			Value:       command.ID,
 			Display:     command.Name,
