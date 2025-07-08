@@ -166,23 +166,13 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return p, cmd
 		}
 	case dialog.SessionListRequestedMsg:
-		// List all sessions
-		sessions, err := p.app.Sessions.List(context.Background())
-		if err != nil {
-			return p, util.ReportError(err)
+		// Show the session dialog (same as Ctrl+S)
+		return p, func() tea.Msg {
+			return tea.KeyMsg{
+				Type: tea.KeyRunes,
+				Runes: []rune{19}, // Ctrl+S ASCII code
+			}
 		}
-		if len(sessions) == 0 {
-			return p, util.ReportInfo("No sessions found")
-		}
-		// Format and display sessions
-		var sessionList strings.Builder
-		sessionList.WriteString("Sessions:\n")
-		for i, s := range sessions {
-			cost := fmt.Sprintf("$%.2f", s.Cost)
-			tokens := s.PromptTokens + s.CompletionTokens
-			sessionList.WriteString(fmt.Sprintf("%d. %s (Tokens: %d, Cost: %s)\n", i+1, s.Title, tokens, cost))
-		}
-		return p, util.ReportInfo(sessionList.String())
 	case dialog.SessionClearRequestedMsg:
 		// Clear the current session (same as Ctrl+N)
 		p.session = session.Session{}
@@ -289,6 +279,11 @@ If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (
 	case dialog.HelpRequestedMsg:
 		// Show help (toggle help dialog)
 		return p, func() tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}} }
+	case dialog.SessionSelectedMsg:
+		// Convert dialog.SessionSelectedMsg to chat.SessionSelectedMsg
+		return p, func() tea.Msg {
+			return chat.SessionSelectedMsg(msg.Session)
+		}
 	case chat.SessionSelectedMsg:
 		if p.session.ID == "" {
 			cmd := p.setSidebar()

@@ -296,7 +296,18 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		case key.Matches(msg, keys.SwitchSession) && !a.showSessionDialog:
 			a.showSessionDialog = true
-			return a, nil
+			// Load sessions into the dialog
+			return a, func() tea.Msg {
+				sessions, err := a.app.Sessions.List(context.Background())
+				if err != nil {
+					return util.ReportError(err)
+				}
+				a.sessionDialog.SetSessions(sessions)
+				if chatPage, ok := a.pages[page.ChatPage].(interface{ GetCurrentSessionID() string }); ok {
+					a.sessionDialog.SetSelectedSession(chatPage.GetCurrentSessionID())
+				}
+				return nil
+			}
 		case key.Matches(msg, keys.Quit):
 			return a, tea.Quit
 		case msg.Type == tea.KeyEsc:
@@ -360,6 +371,18 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, func() tea.Msg {
 			return startCompactSessionMsg{}
 		}
+		
+	// Handle session dialog messages
+	case dialog.SessionSelectedMsg:
+		a.showSessionDialog = false
+		// Forward the message to the chat page
+		a.pages[a.currentPage], cmd = a.pages[a.currentPage].Update(msg)
+		cmds = append(cmds, cmd)
+		return a, tea.Batch(cmds...)
+		
+	case dialog.CloseSessionDialogMsg:
+		a.showSessionDialog = false
+		return a, nil
 	}
 
 	// Handle all other messages
