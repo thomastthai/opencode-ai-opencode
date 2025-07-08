@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/opencode-ai/opencode/internal/app"
+	"github.com/opencode-ai/opencode/internal/logging"
 )
 
 // SlashCommand represents a parsed slash command with its components
@@ -371,8 +372,11 @@ func (p *CommandParser) getAllOptionCompletions(options []*Option, commandPrefix
 
 // GetTabCompletion returns the best completion for tab key
 func (p *CommandParser) GetTabCompletion(input string) (string, []CommandCompletion) {
+	logging.Debug("[CommandParser.GetTabCompletion] Input:", "input", input)
 	parsed := p.Parse(input)
+	logging.Debug("[CommandParser.GetTabCompletion] Parsed:", "topic", parsed.Topic, "command", parsed.Command, "raw", parsed.Raw)
 	completions := p.GetCompletions(parsed)
+	logging.Debug("[CommandParser.GetTabCompletion] Completions count:", "count", len(completions))
 	
 	if len(completions) == 0 {
 		return input, nil
@@ -380,6 +384,7 @@ func (p *CommandParser) GetTabCompletion(input string) (string, []CommandComplet
 	
 	if len(completions) == 1 {
 		// Single match - complete it
+		logging.Debug("[CommandParser.GetTabCompletion] Single match found:", "complete", completions[0].Complete)
 		return completions[0].Complete, nil
 	}
 	
@@ -390,8 +395,17 @@ func (p *CommandParser) GetTabCompletion(input string) (string, []CommandComplet
 		if parsed.Topic != "" {
 			// Find longest common prefix
 			prefix := p.findCommonPrefix(completions, parsed.Topic)
+			logging.Debug("[CommandParser.GetTabCompletion] Topic completion:", "currentTopic", parsed.Topic, "commonPrefix", prefix)
 			if prefix != parsed.Topic {
-				return "/" + prefix, completions
+				// Preserve the leading slash from the original input
+				result := ""
+				if strings.HasPrefix(input, "/") {
+					result = "/" + prefix
+				} else {
+					result = prefix
+				}
+				logging.Debug("[CommandParser.GetTabCompletion] Returning topic completion:", "result", result)
+				return result, completions
 			}
 		}
 	case ParseStateCommand:

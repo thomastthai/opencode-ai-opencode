@@ -165,6 +165,7 @@ func (m *EditorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case dialog.SlashCommandCompleteMsg:
 		// Handle progressive slash command completion
+		logging.Debug("[EditorCmp] SlashCommandCompleteMsg received:", "originalValue", msg.OriginalValue, "newValue", msg.NewValue, "currentValue", m.textarea.Value())
 		m.textarea.SetValue(msg.NewValue)
 		m.textarea.SetCursor(msg.CursorPos)
 		

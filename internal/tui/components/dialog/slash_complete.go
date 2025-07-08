@@ -94,6 +94,7 @@ func UpdateCompletionDialogForSlashCommands(c *completionDialogCmp, msg tea.Msg)
 		}
 	case SlashCommandCompleteMsg:
 		// Update the search text area with the new value
+		logging.Debug("[slash_complete] SlashCommandCompleteMsg received:", "newValue", msg.NewValue, "currentValue", c.pseudoSearchTextArea.Value())
 		c.pseudoSearchTextArea.SetValue(msg.NewValue)
 		c.query = msg.NewValue
 		
@@ -107,6 +108,7 @@ func UpdateCompletionDialogForSlashCommands(c *completionDialogCmp, msg tea.Msg)
 		if strings.HasPrefix(query, "/") {
 			query = query[1:]
 		}
+		logging.Debug("[slash_complete] Updating completions:", "originalValue", msg.NewValue, "strippedQuery", query)
 		items, err := c.completionProvider.GetChildEntries(query)
 		if err != nil {
 			logging.Error("Failed to get completions", err)

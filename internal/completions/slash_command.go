@@ -6,6 +6,7 @@ import (
 
 	"github.com/opencode-ai/opencode/internal/app"
 	"github.com/opencode-ai/opencode/internal/commands"
+	"github.com/opencode-ai/opencode/internal/logging"
 	"github.com/opencode-ai/opencode/internal/tui/components/dialog"
 )
 
@@ -59,6 +60,7 @@ func (p *slashCommandProvider) GetChildEntries(query string) ([]dialog.Completio
 	if !strings.HasPrefix(query, "/") {
 		fullQuery = "/" + query
 	}
+	logging.Debug("[slashCommandProvider.GetChildEntries]", "inputQuery", query, "fullQuery", fullQuery)
 	
 	// Parse the current input
 	parsed := p.parser.Parse(fullQuery)
@@ -101,7 +103,9 @@ func (s *SlashCommandItem) Render(selected bool, width int) string {
 
 // HandleTabCompletion implements TabHandler interface for tab completion
 func (p *slashCommandProvider) HandleTabCompletion(input string) (string, []dialog.CompletionItemI, error) {
+	logging.Debug("[slashCommandProvider.HandleTabCompletion] Input:", "input", input)
 	completed, options := p.parser.GetTabCompletion(input)
+	logging.Debug("[slashCommandProvider.HandleTabCompletion] After GetTabCompletion:", "completed", completed, "optionsCount", len(options))
 	
 	if options == nil {
 		// Single match or no change

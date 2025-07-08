@@ -205,7 +205,7 @@ func (c *completionDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				if query != c.query {
-					logging.Info("Query", query)
+					logging.Debug("[completionDialogCmp] Query update:", "fullValue", fullValue, "query", query, "previousQuery", c.query)
 					items, err := c.completionProvider.GetChildEntries(query)
 					if err != nil {
 						logging.Error("Failed to get child entries", err)

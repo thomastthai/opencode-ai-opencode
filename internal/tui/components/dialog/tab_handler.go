@@ -2,6 +2,7 @@ package dialog
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/opencode-ai/opencode/internal/logging"
 )
 
 // TabHandler is an interface for providers that support tab completion
@@ -18,10 +19,12 @@ func HandleTabKey(c *completionDialogCmp) tea.Cmd {
 	
 	// Get current input value
 	input := c.pseudoSearchTextArea.Value()
+	logging.Debug("[HandleTabKey] Input from pseudoSearchTextArea:", "input", input)
 	
 	// Try to get tab handler from provider
 	if handler, ok := c.completionProvider.(TabHandler); ok {
 		completed, options, err := handler.HandleTabCompletion(input)
+		logging.Debug("[HandleTabKey] After HandleTabCompletion:", "completed", completed, "hasOptions", options != nil)
 		if err != nil {
 			return nil
 		}
