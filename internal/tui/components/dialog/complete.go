@@ -118,6 +118,8 @@ func (c *completionDialogCmp) SyncSearchText(value string) {
 	if err != nil {
 		logging.Error("Failed to get child entries", err)
 	}
+	
+	
 	c.listView.SetItems(items)
 	
 	// Ensure the text area is focused
@@ -235,6 +237,7 @@ func (c *completionDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if err != nil {
 						logging.Error("Failed to get child entries", err)
 					}
+					
 
 					c.listView.SetItems(items)
 					c.query = query

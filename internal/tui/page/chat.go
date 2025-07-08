@@ -130,13 +130,39 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	
 	if strings.HasPrefix(editorValue, "/") {
-		// Only set provider if dialog is not already showing or provider needs to change
-		if !p.showCompletionDialog || p.completionDialog.GetId() != "slash-commands" {
-			p.completionDialog.SetProvider(p.commandCompletionProvider)
+		// Special handling for known complete commands that don't accept arguments
+		// These commands should close the dialog after completion
+		completeCommands := []string{
+			"/system help ",
+			"/system exit ",
+			"/session clear ",
+			"/session list ",
+			"/project init ",
+			"/config show ",
+			"/auth status ",
+			"/help ",
 		}
-		p.showCompletionDialog = true
-		// Sync the completion dialog's search text with editor value
-		p.completionDialog.SyncSearchText(editorValue)
+		
+		isCompleteCommand := false
+		for _, cmd := range completeCommands {
+			if editorValue == cmd {
+				isCompleteCommand = true
+				break
+			}
+		}
+		
+		if !isCompleteCommand {
+			// Only set provider if dialog is not already showing or provider needs to change
+			if !p.showCompletionDialog || p.completionDialog.GetId() != "slash-commands" {
+				p.completionDialog.SetProvider(p.commandCompletionProvider)
+			}
+			p.showCompletionDialog = true
+			// Sync the completion dialog's search text with editor value
+			p.completionDialog.SyncSearchText(editorValue)
+		} else {
+			// Complete command - ensure dialog is closed
+			p.showCompletionDialog = false
+		}
 	} else if strings.HasPrefix(editorValue, "@") {
 		// Only set provider if dialog is not already showing or provider needs to change
 		if !p.showCompletionDialog || p.completionDialog.GetId() != "files" {
@@ -328,8 +354,25 @@ If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (
 		// TODO: Implement auth status
 		return p, util.ReportWarn("Auth status not yet implemented")
 	case dialog.HelpRequestedMsg:
-		// Show help (toggle help dialog)
-		return p, func() tea.Msg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}} }
+		// Show help message
+		logging.Debug("[chatPage] HelpRequestedMsg received", "topic", msg.Topic)
+		
+		helpText := `Available Commands:
+  /help              - Show this help message
+  /session new       - Create a new session
+  /session list      - List all sessions
+  /session clear     - Clear current session
+  /session compact   - Compact session history
+  /file list         - List files in context
+  /file add          - Add file to context
+  /file remove       - Remove file from context
+  /project init      - Initialize project with CLAUDE.md
+  /system help       - Show system help
+  /system exit       - Exit application
+  
+Use Tab for command completion.`
+		
+		return p, util.ReportInfo(helpText)
 	case dialog.SessionSelectedMsg:
 		// Convert dialog.SessionSelectedMsg to chat.SessionSelectedMsg
 		return p, func() tea.Msg {

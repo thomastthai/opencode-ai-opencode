@@ -1,7 +1,6 @@
 package dialog
 
 import (
-	
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/opencode-ai/opencode/internal/logging"
 )
@@ -38,6 +37,27 @@ func HandleTabKey(c *completionDialogCmp) tea.Cmd {
 		
 		if options == nil {
 			// Single match - complete it
+			// Determine if we should keep the dialog open
+			// For known complete commands that don't accept arguments, close the dialog
+			keepOpen := true
+			completeCommands := []string{
+				"/system help ",
+				"/system exit ",
+				"/session clear ",
+				"/session list ",
+				"/project init ",
+				"/config show ",
+				"/auth status ",
+				"/help ",
+			}
+			
+			for _, cmd := range completeCommands {
+				if completed == cmd {
+					keepOpen = false
+					break
+				}
+			}
+			
 			// Send both messages in sequence to track completion state
 			return tea.Sequence(
 				func() tea.Msg {
@@ -51,7 +71,7 @@ func HandleTabKey(c *completionDialogCmp) tea.Cmd {
 						OriginalValue: input,
 						NewValue:      completed,
 						CursorPos:     len(completed),
-						KeepOpen:      true, // Keep open for further completions
+						KeepOpen:      keepOpen,
 					}
 				},
 			)
