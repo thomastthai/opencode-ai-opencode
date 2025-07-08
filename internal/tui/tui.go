@@ -296,6 +296,8 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		case key.Matches(msg, keys.SwitchSession) && !a.showSessionDialog:
 			a.showSessionDialog = true
+			// Don't use verbose for keyboard shortcut
+			a.sessionDialog.SetVerbose(false)
 			// Load sessions into the dialog
 			return a, func() tea.Msg {
 				sessions, err := a.app.Sessions.List(context.Background())
@@ -375,6 +377,8 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle session dialog messages
 	case dialog.SessionListRequestedMsg:
 		a.showSessionDialog = true
+		// Set verbose mode if requested
+		a.sessionDialog.SetVerbose(msg.Verbose)
 		// Load sessions into the dialog
 		return a, func() tea.Msg {
 			sessions, err := a.app.Sessions.List(context.Background())

@@ -1,6 +1,9 @@
 package dialog
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -25,6 +28,7 @@ type SessionDialog interface {
 	layout.Bindings
 	SetSessions(sessions []session.Session)
 	SetSelectedSession(sessionID string)
+	SetVerbose(verbose bool)
 }
 
 type sessionDialogCmp struct {
@@ -33,6 +37,7 @@ type sessionDialogCmp struct {
 	width             int
 	height            int
 	selectedSessionID string
+	verbose           bool
 }
 
 type sessionKeyMap struct {
@@ -73,6 +78,37 @@ var sessionKeys = sessionKeyMap{
 
 func (s *sessionDialogCmp) Init() tea.Cmd {
 	return nil
+}
+
+// formatTimeAgo formats a timestamp as a human-readable time ago string
+func formatTimeAgo(timestamp int64) string {
+	t := time.Unix(timestamp, 0)
+	duration := time.Since(t)
+	
+	switch {
+	case duration < time.Minute:
+		return "just now"
+	case duration < time.Hour:
+		minutes := int(duration.Minutes())
+		if minutes == 1 {
+			return "1 minute ago"
+		}
+		return fmt.Sprintf("%d minutes ago", minutes)
+	case duration < 24*time.Hour:
+		hours := int(duration.Hours())
+		if hours == 1 {
+			return "1 hour ago"
+		}
+		return fmt.Sprintf("%d hours ago", hours)
+	case duration < 7*24*time.Hour:
+		days := int(duration.Hours() / 24)
+		if days == 1 {
+			return "1 day ago"
+		}
+		return fmt.Sprintf("%d days ago", days)
+	default:
+		return t.Format("Jan 2, 2006")
+	}
 }
 
 func (s *sessionDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -120,6 +156,9 @@ func (s *sessionDialogCmp) View() string {
 
 	// Calculate max width needed for session titles
 	maxWidth := 40 // Minimum width
+	if s.verbose {
+		maxWidth = 60 // Need more width for verbose info
+	}
 	for _, sess := range s.sessions {
 		if len(sess.Title) > maxWidth-4 { // Account for padding
 			maxWidth = len(sess.Title) + 4
@@ -130,6 +169,10 @@ func (s *sessionDialogCmp) View() string {
 
 	// Limit height to avoid taking up too much screen space
 	maxVisibleSessions := min(10, len(s.sessions))
+	if s.verbose {
+		// Show fewer items when verbose to account for extra lines
+		maxVisibleSessions = min(5, len(s.sessions))
+	}
 
 	// Build the session list
 	sessionItems := make([]string, 0, maxVisibleSessions)
@@ -159,7 +202,29 @@ func (s *sessionDialogCmp) View() string {
 				Bold(true)
 		}
 
-		sessionItems = append(sessionItems, itemStyle.Padding(0, 1).Render(sess.Title))
+		if s.verbose {
+			// Show session title with additional info
+			title := sess.Title
+			info := fmt.Sprintf("Updated: %s | %d messages",
+				formatTimeAgo(sess.UpdatedAt),
+				sess.MessageCount,
+			)
+			
+			// Render title with proper width
+			sessionItem := itemStyle.Padding(0, 1).Render(title)
+			
+			// Style the info line
+			infoStyle := baseStyle.Foreground(t.TextMuted()).Padding(0, 2).Width(maxWidth)
+			if i == s.selectedIdx {
+				infoStyle = infoStyle.
+					Background(t.Primary()).
+					Foreground(t.Background())
+			}
+			sessionItem += "\n" + infoStyle.Render(info)
+			sessionItems = append(sessionItems, sessionItem)
+		} else {
+			sessionItems = append(sessionItems, itemStyle.Padding(0, 1).Render(sess.Title))
+		}
 	}
 
 	title := baseStyle.
@@ -218,6 +283,10 @@ func (s *sessionDialogCmp) SetSelectedSession(sessionID string) {
 			}
 		}
 	}
+}
+
+func (s *sessionDialogCmp) SetVerbose(verbose bool) {
+	s.verbose = verbose
 }
 
 // NewSessionDialogCmp creates a new session switching dialog

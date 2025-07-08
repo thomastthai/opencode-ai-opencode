@@ -44,7 +44,13 @@ func ExecuteSlashCommand(parser *commands.CommandParser, input string) tea.Cmd {
 			})
 			
 		case strings.Contains(errMsg, "session_list_requested"):
-			return util.CmdHandler(SessionListRequestedMsg{})
+			verbose := false
+			if cmd.Options != nil {
+				verbose = cmd.Options.GetBool("verbose")
+			}
+			return util.CmdHandler(SessionListRequestedMsg{
+				Verbose: verbose,
+			})
 			
 		case strings.Contains(errMsg, "clear_session_requested"):
 			return util.CmdHandler(SessionClearRequestedMsg{})
@@ -117,7 +123,9 @@ type SessionNewRequestedMsg struct {
 	Name string
 }
 
-type SessionListRequestedMsg struct{}
+type SessionListRequestedMsg struct{
+	Verbose bool
+}
 
 type SessionClearRequestedMsg struct{}
 
