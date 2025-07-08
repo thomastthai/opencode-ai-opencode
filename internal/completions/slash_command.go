@@ -62,6 +62,7 @@ func (p *slashCommandProvider) GetChildEntries(query string) ([]dialog.Completio
 	}
 	logging.Debug("[slashCommandProvider.GetChildEntries]", "inputQuery", query, "fullQuery", fullQuery)
 	
+	
 	// Parse the current input
 	parsed := p.parser.Parse(fullQuery)
 	completions := p.parser.GetCompletions(parsed)

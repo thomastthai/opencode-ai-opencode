@@ -1,9 +1,6 @@
 package dialog
 
 import (
-	"fmt"
-	"os"
-	
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
@@ -88,6 +85,8 @@ type CompletionDialog interface {
 	// Test helper methods
 	GetListItems() []CompletionItemI
 	GetEmptyMessage() string
+	// Sync the search text with external value
+	SyncSearchText(value string)
 }
 
 func (c *completionDialogCmp) GetId() string {
@@ -102,6 +101,27 @@ func (c *completionDialogCmp) GetListItems() []CompletionItemI {
 // GetEmptyMessage returns the current empty message (for testing)
 func (c *completionDialogCmp) GetEmptyMessage() string {
 	return c.listView.GetEmptyMessage()
+}
+
+// SyncSearchText synchronizes the dialog's search text with an external value
+func (c *completionDialogCmp) SyncSearchText(value string) {
+	c.pseudoSearchTextArea.SetValue(value)
+	// Extract query by removing the trigger character (/ or @)
+	if len(value) > 0 && (value[0] == '/' || value[0] == '@') {
+		c.query = value[1:]
+	} else {
+		c.query = value
+	}
+	
+	// Update the list items based on the new query
+	items, err := c.completionProvider.GetChildEntries(c.query)
+	if err != nil {
+		logging.Error("Failed to get child entries", err)
+	}
+	c.listView.SetItems(items)
+	
+	// Ensure the text area is focused
+	c.pseudoSearchTextArea.Focus()
 }
 
 
@@ -170,6 +190,7 @@ func (c *completionDialogCmp) close() tea.Cmd {
 	c.listView.SetItems([]CompletionItemI{})
 	c.pseudoSearchTextArea.Reset()
 	c.pseudoSearchTextArea.Blur()
+	c.query = "" // Reset query state on close
 
 	return util.CmdHandler(CompletionDialogCloseMsg{})
 }
@@ -201,12 +222,6 @@ func (c *completionDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				var query string
 				fullValue := c.pseudoSearchTextArea.Value()
 				
-				// Log textarea value updates
-				debugLog := fmt.Sprintf("[completionDialog] TextArea updated: value=%q (key: %v)\n", fullValue, msg.String())
-				if f, err := os.OpenFile("/tmp/opencode-tab-debug.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644); err == nil {
-					f.WriteString(debugLog)
-					f.Close()
-				}
 				// Extract query by removing the trigger character (/ or @)
 				if len(fullValue) > 0 && (fullValue[0] == '/' || fullValue[0] == '@') {
 					query = fullValue[1:]
@@ -245,13 +260,8 @@ func (c *completionDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// For backspace, check if we should close based on the current value
 				// The textarea has already processed the backspace at this point
 				if msg.String() == "backspace" {
-					// Log the value after backspace
+					// Get the value after backspace
 					currentValue := c.pseudoSearchTextArea.Value()
-					debugLog := fmt.Sprintf("[completionDialog] After backspace: value=%q\n", currentValue)
-					if f, err := os.OpenFile("/tmp/opencode-tab-debug.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644); err == nil {
-						f.WriteString(debugLog)
-						f.Close()
-					}
 					
 					// If after backspace we only have the trigger character, close the dialog
 					// This prevents the issue where typing "/" again would create "//"
@@ -269,27 +279,9 @@ func (c *completionDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			return c, tea.Batch(cmds...)
 		} else {
-			// Dialog is not focused, initialize it with the trigger character
-			triggerChar := msg.String()
-			if triggerChar == "/" || triggerChar == "@" {
-				// Log when dialog is initialized
-				debugLog := fmt.Sprintf("[completionDialog] Initializing with trigger: %q\n", triggerChar)
-				if f, err := os.OpenFile("/tmp/opencode-tab-debug.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644); err == nil {
-					f.WriteString(debugLog)
-					f.Close()
-				}
-				
-				// Load initial completions for empty query
-				items, err := c.completionProvider.GetChildEntries("")
-				if err != nil {
-					logging.Error("Failed to get child entries", err)
-				}
-
-				c.listView.SetItems(items)
-				c.pseudoSearchTextArea.SetValue(triggerChar)
-				c.query = "" // Reset query to ensure proper state
-				return c, c.pseudoSearchTextArea.Focus()
-			}
+			// Dialog is not focused - this shouldn't happen as the chat page manages focus
+			// Don't process trigger characters here to avoid duplication
+			return c, nil
 		}
 	case tea.WindowSizeMsg:
 		c.width = msg.Width

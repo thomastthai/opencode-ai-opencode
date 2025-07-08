@@ -109,12 +109,16 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			p.completionDialog.SetProvider(p.commandCompletionProvider)
 		}
 		p.showCompletionDialog = true
+		// Sync the completion dialog's search text with editor value
+		p.completionDialog.SyncSearchText(editorValue)
 	} else if strings.HasPrefix(editorValue, "@") {
 		// Only set provider if dialog is not already showing or provider needs to change
 		if !p.showCompletionDialog || p.completionDialog.GetId() != "files" {
 			p.completionDialog.SetProvider(p.fileCompletionProvider)
 		}
 		p.showCompletionDialog = true
+		// Sync the completion dialog's search text with editor value
+		p.completionDialog.SyncSearchText(editorValue)
 	} else {
 		p.showCompletionDialog = false
 	}
@@ -136,6 +140,9 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.SlashCommandExecuteMsg:
 		// Close completion dialog
 		p.showCompletionDialog = false
+		
+		// Clear the editor textarea after executing slash command
+		p.editor.SetValue("")
 		
 		// Create parser and execute command
 		parser := commands.NewCommandParserWithApp(commands.GetGlobalRegistry(), p.app)

@@ -146,6 +146,7 @@ func (p *CommandParser) GetParseState(parsed SlashCommand) ParseState {
 func (p *CommandParser) GetCompletions(parsed SlashCommand) []CommandCompletion {
 	state := p.GetParseState(parsed)
 	
+	
 	switch state {
 	case ParseStateTopic:
 		return p.getTopicCompletions(parsed.Topic)

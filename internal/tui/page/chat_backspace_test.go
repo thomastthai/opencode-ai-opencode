@@ -10,7 +10,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/opencode-ai/opencode/internal/app"
 	"github.com/opencode-ai/opencode/internal/config"
-	"github.com/opencode-ai/opencode/internal/tui/components/dialog"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -39,33 +38,50 @@ func TestChatPage_BackspaceToSlashShowsCommands(t *testing.T) {
 
 	chatPageModel := NewChatPage(app)
 	p := chatPageModel.(*chatPage)
+	
+	// Initialize the page
+	initCmd := p.Init()
+	if initCmd != nil {
+		// Execute initialization
+		initCmd()
+	}
 
-	// Step 1: Type "/list"
-	p.editor.SetValue("/list")
-	// Simulate the updates that happen when typing
-	p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
-	p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
-	p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
-	p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
-	p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	// Step 1: Type "/list" - simulate each character separately
+	// Type "/"
+	updated, _ := p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	p = updated.(*chatPage)
+	
+	// Type "l"
+	updated, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	p = updated.(*chatPage)
+	
+	// Type "i"
+	updated, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	p = updated.(*chatPage)
+	
+	// Type "s"
+	updated, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	p = updated.(*chatPage)
+	
+	// Type "t"
+	updated, _ = p.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	p = updated.(*chatPage)
 	
 	assert.True(t, p.showCompletionDialog, "Dialog should be visible with /list")
 	assert.Equal(t, "slash-commands", p.completionDialog.GetId())
 
-	// Step 2: Backspace to just "/"
-	// Don't set the value directly, let the completion dialog handle the backspaces
-	// Update the completion dialog with backspace messages
-	dialogModel, _ := p.completionDialog.Update(tea.KeyMsg{Type: tea.KeyBackspace})
-	p.completionDialog = dialogModel.(dialog.CompletionDialog)
-	dialogModel, _ = p.completionDialog.Update(tea.KeyMsg{Type: tea.KeyBackspace})
-	p.completionDialog = dialogModel.(dialog.CompletionDialog)
-	dialogModel, _ = p.completionDialog.Update(tea.KeyMsg{Type: tea.KeyBackspace})
-	p.completionDialog = dialogModel.(dialog.CompletionDialog)
-	dialogModel, _ = p.completionDialog.Update(tea.KeyMsg{Type: tea.KeyBackspace})
-	p.completionDialog = dialogModel.(dialog.CompletionDialog)
+	// Step 2: Backspace to just "/" - simulate backspaces through the page update
+	// The editor should currently have "/list"
+	assert.Equal(t, "/list", p.editor.GetValue())
 	
-	// Now set the editor value to match
-	p.editor.SetValue("/")
+	// Backspace 4 times to remove "list"
+	for i := 0; i < 4; i++ {
+		updated, _ = p.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		p = updated.(*chatPage)
+	}
+	
+	// Editor should now have just "/"
+	assert.Equal(t, "/", p.editor.GetValue())
 
 	// Step 3: Verify dialog is still showing and has commands
 	assert.True(t, p.showCompletionDialog, "Dialog should still be visible with just /")
@@ -106,6 +122,12 @@ func TestChatPage_BackspaceScenarios(t *testing.T) {
 	t.Run("backspace from /l to /", func(t *testing.T) {
 		chatPageModel := NewChatPage(app)
 		p := chatPageModel.(*chatPage)
+		
+		// Initialize the page
+		initCmd := p.Init()
+		if initCmd != nil {
+			initCmd()
+		}
 
 		// Type /l
 		p.editor.SetValue("/l")
@@ -123,6 +145,12 @@ func TestChatPage_BackspaceScenarios(t *testing.T) {
 	t.Run("type / then immediately check", func(t *testing.T) {
 		chatPageModel := NewChatPage(app)
 		p := chatPageModel.(*chatPage)
+		
+		// Initialize the page
+		initCmd := p.Init()
+		if initCmd != nil {
+			initCmd()
+		}
 
 		// Just type /
 		p.editor.SetValue("/")
