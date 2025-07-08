@@ -166,12 +166,9 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return p, cmd
 		}
 	case dialog.SessionListRequestedMsg:
-		// Show the session dialog (same as Ctrl+S)
+		// Return the same message to be handled by the main TUI
 		return p, func() tea.Msg {
-			return tea.KeyMsg{
-				Type: tea.KeyRunes,
-				Runes: []rune{19}, // Ctrl+S ASCII code
-			}
+			return msg
 		}
 	case dialog.SessionClearRequestedMsg:
 		// Clear the current session (same as Ctrl+N)
